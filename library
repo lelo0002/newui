@@ -1,4 +1,4 @@
--- 112313
+-- 2323232
 local FetchService = setmetatable({}, {
 
         __index = function(_, service)
@@ -1697,6 +1697,8 @@ local FetchService = setmetatable({}, {
 
         
         if isfolder and makefolder then
+            
+        if isfolder and makefolder then
             if not isfolder(Library.Directory) then
                 makefolder(Library.Directory)
             end
@@ -1708,6 +1710,8 @@ local FetchService = setmetatable({}, {
                     makefolder(Path)
                 end
             end
+        end
+
         end
 
 
@@ -2657,7 +2661,7 @@ local FetchService = setmetatable({}, {
             Items['Window'] = Library:Create( "Frame", {
                 Parent = Library.Holder;
                 Name = "\0";
-                Position = Dim2(0, 0, 0, 0);
+                Position = UDim2.new(0.5, -(Cfg.Size.X.Offset/2), 0.5, -(Cfg.Size.Y.Offset/2));
                 BorderColor3 = Rgb(0, 0, 0);
                 Size = Cfg.Size;
                 BorderSizePixel = 0;
