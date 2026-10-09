@@ -1,4 +1,5 @@
---23
+--
+
 --
 
     local FetchService = setmetatable({}, {
@@ -1286,7 +1287,12 @@
             print("loaded config:", Name)
         end
 
-        --
+        function Library:DeleteConfig(Name)
+            local Path = Library.Directory .. "/Configs" .. "/" .. Name .. ".json"
+            if isfile and isfile(Path) then
+                pcall(delfile, Path)
+            end
+        end
 
         -- Themes
         function Library:GetThemeValue(Path)
@@ -1397,9 +1403,13 @@
         --  Library ->
 
         function Library:Window(params)
+        local rawName = (params.Name or params.name) or '<font color="#FFFFFF">fatal</font><font color="#58A6FF">.hit</font>'
+        if rawName == 'Home' or rawName == 'fatal.hit' then
+            rawName = '<font color="#FFFFFF">fatal</font><font color="#58A6FF">.hit</font>'
+        end
         local Cfg = {
-            Name = (params.Name or params.name) or 'Home',
-            Size = (params.Size or params.size) or Dim2(0, 560, 0, 420),
+            Name = rawName,
+            Size = (params.Size or params.size) or Dim2(0, 840, 0, 520),
 
             TabMeta = nil,
             Items = { };
@@ -1537,12 +1547,13 @@
                 Position = Dim2(0, 50, 0, 15);
                 Size = Dim2(1, -65, 0, 20);
                 BackgroundTransparency = 1;
-                TextColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+                TextColor3 = Library.CurrentTheme.Text.Main or Rgb(225, 230, 240);
                 TextXAlignment = Enum.TextXAlignment.Left;
                 FontFace = Library.Font;
                 TextSize = 16;
+                RichText = true;
                 Text = Cfg.Name;
-            }); Library:Themeify(Items['Title'], 'TextColor3', {'Accent'});
+            }); Library:Themeify(Items['Title'], 'TextColor3', {'Text', 'Main'});
 
             -- Separator Line between Sidebar and Container
             Items['Separator'] = Library:Create('Frame', {
@@ -1619,8 +1630,8 @@
         Library:Draggify(Items['Window']);
         Library:Resizify(
             Items['Window'],
-            Vec2(510, 400),
-            Vec2(1000, 1000)
+            Vec2(680, 420),
+            Vec2(1200, 1000)
         );
 
         Cfg.Items = Items;
@@ -2789,8 +2800,20 @@
                 Parent = Items['Page'];
                 Name = "\0";
                 BackgroundTransparency = 1;
-                Size = Dim2(0.5, -4, 1, 0);
-                Position = Dim2(0, 0, 0, 0);
+                Size = Dim2(1/3, -8, 1, 0);
+                Position = Dim2(0, 6, 0, 0);
+                BorderColor3 = Rgb(0, 0, 0);
+                BorderSizePixel = 0;
+                AutomaticSize = Enum.AutomaticSize.Y;
+                BackgroundColor3 = Rgb(1, 1, 1);
+            });
+
+            Items['Center'] = Library:Create( 'Frame', {
+                Parent = Items['Page'];
+                Name = "\0";
+                BackgroundTransparency = 1;
+                Size = Dim2(1/3, -8, 1, 0);
+                Position = Dim2(1/3, 4, 0, 0);
                 BorderColor3 = Rgb(0, 0, 0);
                 BorderSizePixel = 0;
                 AutomaticSize = Enum.AutomaticSize.Y;
@@ -2802,14 +2825,14 @@
                 Name = "\0";
                 BackgroundTransparency = 1;
                 BorderColor3 = Rgb(0, 0, 0);
-                Size = Dim2(0.5, -4, 1, 0);
-                Position = Dim2(0.5, 4, 0, 0);
+                Size = Dim2(1/3, -8, 1, 0);
+                Position = Dim2(2/3, 2, 0, 0);
                 AutomaticSize = Enum.AutomaticSize.Y;
                 BorderSizePixel = 0;
                 BackgroundColor3 = Rgb(1, 1, 1);
             });
 
-            for Index, Item in { Items['Left'], Items['Right'] } do
+            for _, Item in { Items['Left'], Items['Center'], Items['Right'] } do
                 Library:Create( 'UIListLayout', {
                     Parent = Item;
                     Padding = Dim(0, 8);
@@ -2817,35 +2840,28 @@
                     HorizontalFlex = Enum.UIFlexAlignment.Fill
                 });
 
-                if Item == Items['Left'] then
-                    Library:Create('UIPadding', {
-                        Parent = Item;
-                        PaddingTop = Dim(0, 8);
-                        PaddingLeft = Dim(0, 6);
-                    })
-                else
-                    Library:Create('UIPadding', {
-                        Parent = Item;
-                        PaddingTop = Dim(0, 8);
-                        PaddingRight = Dim(0, 8);
-                    })
-                end
+                Library:Create('UIPadding', {
+                    Parent = Item;
+                    PaddingTop = Dim(0, 8);
+                });
             end
         end
 
         local function UpdateCanvas()
             local LeftSize = Items.Left.AbsoluteSize.Y
+            local CenterSize = Items.Center.AbsoluteSize.Y
             local RightSize = Items.Right.AbsoluteSize.Y
 
             Items.Page.CanvasSize = Dim2(
                 0,
                 0,
                 0,
-                math.max(LeftSize, RightSize) + 8
+                math.max(LeftSize, CenterSize, RightSize) + 16
             )
         end
 
         Items.Left:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateCanvas)
+        Items.Center:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateCanvas)
         Items.Right:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateCanvas)
 
         task.defer(UpdateCanvas)
@@ -2914,8 +2930,16 @@
 
             local Items = Cfg.Items; do
 
+                local side = tostring(Cfg.Side or 'left'):lower()
+                local parentColumn = self.Items.Left
+                if side == 'center' or side == 'middle' then
+                    parentColumn = self.Items.Center
+                elseif side == 'right' then
+                    parentColumn = self.Items.Right
+                end
+
                 Items['Section'] = Library:Create('Frame', {
-                    Parent = Cfg.Side:lower() == 'left' and self.Items.Left or self.Items.Right;
+                    Parent = parentColumn;
                     Name = "\0";
                     ClipsDescendants = false;
                     BorderColor3 = Rgb(0, 0, 0);
