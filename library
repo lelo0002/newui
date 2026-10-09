@@ -1,4 +1,4 @@
--- 112424
+-- 11242424242442
 local FetchService = setmetatable({}, {
 
         __index = function(_, service)
@@ -320,6 +320,42 @@ local FetchService = setmetatable({}, {
         end
         
     local Themes = {
+
+    ['fatal'] = {
+        ['Accent'] = Rgb(180, 200, 255),
+        ['Borders'] = {
+            ['Outline'] = Rgb(5, 8, 12),
+            ['Inline']  = Rgb(58, 67, 82),
+        },
+        ['Background'] = Rgb(22, 25, 32),
+        ['Text'] = {
+            ['Main']       = Rgb(225, 230, 240),
+            ['Unselected'] = Rgb(145, 152, 165),
+        },
+        ['Gradients'] = {
+            ['Tab'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['Base'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['ElementBase'] = ColorSeq({
+                ColorKey(0, Rgb(52, 58, 72)),
+                ColorKey(1, Rgb(31, 35, 44)),
+            }),
+            ['ElementActive'] = ColorSeq({
+                ColorKey(0, Rgb(180, 200, 255)),
+                ColorKey(1, Rgb(130, 160, 230)),
+            }),
+            ['Container'] = ColorSeq({
+                ColorKey(0, Rgb(36, 40, 50)),
+                ColorKey(1, Rgb(28, 31, 39)),
+            }),
+        },
+    },
+
 
     ['Preset'] = {
 
@@ -4004,7 +4040,7 @@ function Library:Keypicker(Colorpicker)
 
                     BorderColor3 = Rgb(0, 0, 0);
 
-                    Size = Dim2(0, 140, 0, 50);
+                    Size = Dim2(0, 28, 0, 40);
 
                     BorderSizePixel = 0;
 
@@ -4278,7 +4314,7 @@ function Library:Keypicker(Colorpicker)
 
                     Position = Dim2(0.5, 0, 0.5, 0);
 
-                    Size = Dim2(1, -8, 1, -10);
+                    Size = Dim2(1, -4, 1, -4);
 
 
 
