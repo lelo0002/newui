@@ -1,4 +1,4 @@
---
+--23232
 
 --
 
@@ -139,9 +139,13 @@
         };
 
         Library.GlowElements = {}
-        Library.GlowAmount = 0
+        Library.GlowAmount = 1
+        Library.GlowEnabled = true
 
         function Library:SetGlowAmount(amount)
+            if amount > 1 then
+                amount = amount / 100
+            end
             Library.GlowAmount = amount
             for _, data in ipairs(Library.GlowElements) do
                 local obj = data.Obj
@@ -152,9 +156,69 @@
             end
         end
 
+        function Library:SetGlow(state)
+            Library.GlowEnabled = state
+            for _, data in ipairs(Library.GlowElements) do
+                local obj = data.Obj
+                if obj and obj.Parent then
+                    obj.Visible = state
+                end
+            end
+        end
+
         function Library:AddGlow(obj, baseTransparency)
             table.insert(Library.GlowElements, { Obj = obj, Base = baseTransparency })
             obj.ImageTransparency = math.clamp(1 - ((1 - baseTransparency) * Library.GlowAmount), 0, 1)
+            obj.Visible = Library.GlowEnabled
+        end
+
+        Library.BlurEnabled = false
+        Library.BlurSize = 20
+        Library.BlurEffect = nil
+
+        function Library:SetBlur(state, size)
+            local Lighting = FetchService['Lighting'] or game:GetService('Lighting')
+            if not Library.BlurEffect then
+                Library.BlurEffect = Lighting:FindFirstChild('FatalMenuBlur') or Instance.new('BlurEffect')
+                Library.BlurEffect.Name = 'FatalMenuBlur'
+                Library.BlurEffect.Size = Library.BlurSize or 20
+                Library.BlurEffect.Enabled = false
+                Library.BlurEffect.Parent = Lighting
+            end
+            if size ~= nil then
+                Library.BlurSize = size
+                Library.BlurEffect.Size = size
+            end
+            if state ~= nil then
+                Library.BlurEnabled = state
+            end
+            local shouldShow = (Library.BlurEnabled == true) and (Library.Holder and Library.Holder.Enabled ~= false)
+            Library.BlurEffect.Enabled = shouldShow
+        end
+
+        Library.ElementGlowEnabled = true
+        Library.ElementGlowList = {}
+
+        function Library:AddElementGlow(instance, condition)
+            table.insert(Library.ElementGlowList, { Instance = instance, Condition = condition })
+            if condition then
+                instance.Visible = Library.ElementGlowEnabled and (condition() == true)
+            else
+                instance.Visible = Library.ElementGlowEnabled
+            end
+        end
+
+        function Library:SetElementGlow(state)
+            Library.ElementGlowEnabled = state
+            for _, item in ipairs(Library.ElementGlowList) do
+                if item.Instance and item.Instance.Parent then
+                    if type(item.Condition) == "function" then
+                        item.Instance.Visible = state and (item.Condition() == true)
+                    else
+                        item.Instance.Visible = state
+                    end
+                end
+            end
         end
 
 
@@ -207,37 +271,88 @@
         end
         
     local Themes = {
-    ['fatal'] = {
-        ['Accent'] = Rgb(180, 200, 255),
+    ['fatal.hit'] = {
+        ['Accent'] = Rgb(64, 185, 230),
+
         ['Borders'] = {
-            ['Outline'] = Rgb(5, 8, 12),
-            ['Inline']  = Rgb(58, 67, 82),
+            ['Outline'] = Rgb(0, 0, 0),
+            ['Inline']  = Rgb(79, 82, 87),
         },
-        ['Background'] = Rgb(22, 25, 32),
+
+        ['Background'] = Rgb(32, 33, 37),
+
         ['Text'] = {
-            ['Main']       = Rgb(225, 230, 240),
-            ['Unselected'] = Rgb(145, 152, 165),
+            ['Main']       = Rgb(214, 217, 224),
+            ['Unselected'] = Rgb(175, 175, 175),
         },
+
         ['Gradients'] = {
             ['Tab'] = ColorSeq({
-                ColorKey(0, Rgb(40, 45, 56)),
-                ColorKey(1, Rgb(24, 27, 35)),
+                ColorKey(0, Rgb(45, 48, 55)),
+                ColorKey(1, Rgb(32, 33, 37)),
             }),
+
             ['Base'] = ColorSeq({
-                ColorKey(0, Rgb(40, 45, 56)),
-                ColorKey(1, Rgb(24, 27, 35)),
+                ColorKey(0, Rgb(45, 48, 55)),
+                ColorKey(1, Rgb(32, 33, 37)),
             }),
+
             ['ElementBase'] = ColorSeq({
-                ColorKey(0, Rgb(52, 58, 72)),
-                ColorKey(1, Rgb(31, 35, 44)),
+                ColorKey(0, Rgb(45, 48, 55)),
+                ColorKey(1, Rgb(32, 33, 37)),
             }),
+
             ['ElementActive'] = ColorSeq({
-                ColorKey(0, Rgb(180, 200, 255)),
-                ColorKey(1, Rgb(130, 160, 230)),
+                ColorKey(0, Rgb(64, 185, 230)),
+                ColorKey(1, Rgb(32, 100, 135)),
             }),
+
             ['Container'] = ColorSeq({
-                ColorKey(0, Rgb(36, 40, 50)),
-                ColorKey(1, Rgb(28, 31, 39)),
+                ColorKey(0, Rgb(45, 48, 55)),
+                ColorKey(1, Rgb(45, 48, 53)),
+            }),
+        },
+    },
+
+    ['fatal'] = {
+        ['Accent'] = Rgb(64, 185, 230),
+
+        ['Borders'] = {
+            ['Outline'] = Rgb(0, 0, 0),
+            ['Inline']  = Rgb(79, 82, 87),
+        },
+
+        ['Background'] = Rgb(32, 33, 37),
+
+        ['Text'] = {
+            ['Main']       = Rgb(214, 217, 224),
+            ['Unselected'] = Rgb(175, 175, 175),
+        },
+
+        ['Gradients'] = {
+            ['Tab'] = ColorSeq({
+                ColorKey(0, Rgb(45, 48, 55)),
+                ColorKey(1, Rgb(32, 33, 37)),
+            }),
+
+            ['Base'] = ColorSeq({
+                ColorKey(0, Rgb(45, 48, 55)),
+                ColorKey(1, Rgb(32, 33, 37)),
+            }),
+
+            ['ElementBase'] = ColorSeq({
+                ColorKey(0, Rgb(45, 48, 55)),
+                ColorKey(1, Rgb(32, 33, 37)),
+            }),
+
+            ['ElementActive'] = ColorSeq({
+                ColorKey(0, Rgb(64, 185, 230)),
+                ColorKey(1, Rgb(32, 100, 135)),
+            }),
+
+            ['Container'] = ColorSeq({
+                ColorKey(0, Rgb(45, 48, 55)),
+                ColorKey(1, Rgb(45, 48, 53)),
             }),
         },
     },
@@ -850,7 +965,7 @@
         },
     };
 
-        Library.CurrentTheme = Themes.Preset
+        Library.CurrentTheme = Themes['fatal.hit'] or Themes['fatal'] or Themes.Preset
 
         for Theme, Color in Themes do
             Themes.Utility[Theme] = {
@@ -1395,6 +1510,11 @@
                 Library['Extras']:Destroy();
             end
 
+            if Library['BlurEffect'] then
+                Library['BlurEffect']:Destroy();
+                Library['BlurEffect'] = nil;
+            end
+
             Library = nil;
         end
 
@@ -1403,12 +1523,10 @@
         --  Library ->
 
         function Library:Window(params)
-        local rawName = (params.Name or params.name) or '<font color="#FFFFFF">fatal</font><font color="#58A6FF">.hit</font>'
-        if rawName == 'Home' or rawName == 'fatal.hit' then
-            rawName = '<font color="#FFFFFF">fatal</font><font color="#58A6FF">.hit</font>'
-        end
+        local rawName = (params.Name or params.name)
+        local isDefaultName = (rawName == nil or rawName == 'Home' or rawName == 'fatal.hit' or rawName == 'fatal\n.hit' or rawName == '<font color="#FFFFFF">fatal</font><font color="#40B9E6">.hit</font>' or rawName == '<font color="#FFFFFF">fatal</font>\n<font color="#40B9E6">.hit</font>')
         local Cfg = {
-            Name = rawName,
+            Name = rawName or '<font color="#FFFFFF">fatal</font>\n<font color="#40B9E6">.hit</font>',
             Size = (params.Size or params.size) or Dim2(0, 840, 0, 520),
 
             TabMeta = nil,
@@ -1483,6 +1601,20 @@
                 ZIndex = 5;
             }); Library:Themeify(Items['TopAccent'], 'BackgroundColor3', {'Accent'});
 
+            Items['TopAccentGlow'] = Library:Create('ImageLabel', {
+                Parent = Items['TopAccent'];
+                Name = "\0";
+                BackgroundTransparency = 1;
+                Image = "rbxassetid://1316045217";
+                ImageColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+                ImageTransparency = 0.5;
+                Position = Dim2(0, 0, 0, -4);
+                Size = Dim2(1, 0, 0, 9);
+                ZIndex = 4;
+                Visible = Library.ElementGlowEnabled;
+            }); Library:Themeify(Items['TopAccentGlow'], 'ImageColor3', {'Accent'});
+            Library:AddElementGlow(Items['TopAccentGlow'])
+
 
             Items['Gradient'] = Library:Create('UIGradient', {
                 Parent = Items['Window'];
@@ -1526,7 +1658,7 @@
                 Parent = Items['Sidebar'];
                 Name = "\0";
                 Position = Dim2(0, 0, 0, 0);
-                Size = Dim2(1, 0, 0, 50);
+                Size = Dim2(1, 0, 0, 58);
                 BackgroundTransparency = 1;
             });
         
@@ -1534,26 +1666,54 @@
             Items['Logo'] = Library:Create('ImageLabel', {
                 Parent = Items['Top'];
                 Name = "\0";
-                Position = Dim2(0, 15, 0, 10);
-                Size = Dim2(0, 30, 0, 30);
+                Position = Dim2(0, 12, 0, 11);
+                Size = Dim2(0, 36, 0, 36);
                 BackgroundTransparency = 1;
                 Image = "rbxassetid://123244665811822";
                 ImageColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
             }); Library:Themeify(Items['Logo'], 'ImageColor3', {'Accent'});
 
+            Items['LogoGlow'] = Library:Create('ImageLabel', {
+                Parent = Items['Logo'];
+                Name = "\0";
+                BackgroundTransparency = 1;
+                Image = "rbxassetid://1316045217";
+                ImageColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+                ImageTransparency = 0.6;
+                Position = Dim2(0, -6, 0, -6);
+                Size = Dim2(1, 12, 1, 12);
+                ZIndex = -1;
+                Visible = Library.ElementGlowEnabled;
+            }); Library:Themeify(Items['LogoGlow'], 'ImageColor3', {'Accent'});
+            Library:AddElementGlow(Items['LogoGlow'])
+
+            local accentHex = Library:FromHex(Library.CurrentTheme.Accent or Rgb(64, 185, 230))
+            local titleText = isDefaultName and ('<font color="#FFFFFF">fatal</font>\n<font color="' .. accentHex .. '">.hit</font>') or Cfg.Name
+
             Items['Title'] = Library:Create( 'TextLabel', {
                 Parent = Items['Top'];
                 Name = "\0";
-                Position = Dim2(0, 50, 0, 15);
-                Size = Dim2(1, -65, 0, 20);
+                Position = Dim2(0, 54, 0, 11);
+                Size = Dim2(1, -58, 0, 36);
                 BackgroundTransparency = 1;
                 TextColor3 = Library.CurrentTheme.Text.Main or Rgb(225, 230, 240);
                 TextXAlignment = Enum.TextXAlignment.Left;
+                TextYAlignment = Enum.TextYAlignment.Center;
                 FontFace = Library.Font;
-                TextSize = 16;
+                TextSize = 14;
+                LineHeight = 1.05;
                 RichText = true;
-                Text = Cfg.Name;
+                Text = titleText;
             }); Library:Themeify(Items['Title'], 'TextColor3', {'Text', 'Main'});
+
+            if isDefaultName then
+                Library:RegisterThemeCallback(function()
+                    if Items['Title'] and Items['Title'].Parent then
+                        local curHex = Library:FromHex(Library.CurrentTheme.Accent or Rgb(64, 185, 230))
+                        Items['Title'].Text = '<font color="#FFFFFF">fatal</font>\n<font color="' .. curHex .. '">.hit</font>'
+                    end
+                end)
+            end
 
             -- Separator Line between Sidebar and Container
             Items['Separator'] = Library:Create('Frame', {
@@ -1592,8 +1752,8 @@
                 Parent = Items['Sidebar'];
                 Name = "\0";
                 BackgroundTransparency = 1;
-                Position = Dim2(0, 0, 0, 50);
-                Size = Dim2(1, 0, 1, -60);
+                Position = Dim2(0, 0, 0, 58);
+                Size = Dim2(1, 0, 1, -68);
                 ZIndex = 2;
             });
 
@@ -1620,6 +1780,9 @@
                 Items['Window'].Visible = true;
             else
                 Items['Window'].Visible = false;
+            end
+            if Library.SetBlur then
+                Library:SetBlur()
             end
         end
 
@@ -2448,9 +2611,11 @@
         end
 
         function Library:Watermark(params)
+            params = params or {}
             local Cfg = {
-                Name = (params.Name or params.name) or 'Watermark',
+                Name = (params.Name or params.name) or 'fatal.hit',
                 Modules = (params.Modules or params.modules) or { },
+                Visible = (params.Visible ~= false),
 
                 Items = { };
             };
@@ -2460,30 +2625,29 @@
                 Items['WatermarkContainer'] = Library:Create('Frame', {
                     Parent = Library.Extras;
                     Name = "\0";
-                    Position = Dim2(0.0077770426869392395, 0, 0.900876522064209, 0);
+                    Position = params.Position or Dim2(0, 20, 0, 20);
                     BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(0, 260, 0, 36);
-                    --AutomaticSize = Enum.AutomaticSize.X;
+                    Size = Dim2(0, 0, 0, 24);
+                    AutomaticSize = Enum.AutomaticSize.X;
                     BorderSizePixel = 0;
                     Active = true;
                     BackgroundTransparency = 1;
                     BackgroundColor3 = Rgb(255, 255, 255);
+                    Visible = Cfg.Visible;
                 })
                 Library:Draggify(Items['WatermarkContainer'])
 
                 Items['Watermark'] = Library:Create('Frame', {
                     Parent = Items['WatermarkContainer'];
                     Name = "\0";
-                    Position = Dim2(0.0077770426869392395, 0, 0.900876522064209, 0);
+                    Position = Dim2(0, 0, 0, 0);
                     BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(0, 250, 0, 26);
-                    --AutomaticSize = Enum.AutomaticSize.X;
+                    Size = Dim2(0, 0, 0, 24);
+                    AutomaticSize = Enum.AutomaticSize.X;
                     BorderSizePixel = 0;
                     Active = true;
                     BackgroundColor3 = Rgb(255, 255, 255);
                 });
-
-
 
                 Items['Gradient'] = Library:Create('UIGradient', {
                     Rotation = 90;
@@ -2516,13 +2680,13 @@
                 Items['Container'] = Library:Create('Frame', {
                     Parent = Items['Watermark'];
                     Name = "\0";
-                    Position = Dim2(0, 4, 0, 4);
+                    Position = Dim2(0, 3, 0, 3);
                     BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(1, -8, 1, -8);
+                    Size = Dim2(1, -6, 1, -6);
                     BorderSizePixel = 0;
+                    AutomaticSize = Enum.AutomaticSize.X;
                     BackgroundColor3 = Library.CurrentTheme.Background;
                 }); Library:Themeify(Items['Container'], 'BackgroundColor3', {'Background'});
-
 
                 Items['ContainerInline'] = Library:Create('UIStroke', {
                     Parent = Items['Container'];
@@ -2544,34 +2708,60 @@
                     BackgroundColor3 = Library.CurrentTheme.Accent;
                 }); Library:Themeify(Items['Accent'], 'BackgroundColor3', {'Accent'});
 
+                Items['AccentGlow'] = Library:Create('ImageLabel', {
+                    Parent = Items['Accent'];
+                    Name = "\0";
+                    BackgroundTransparency = 1;
+                    Image = "rbxassetid://1316045217";
+                    ImageColor3 = Library.CurrentTheme.Accent or Rgb(64, 185, 230);
+                    ImageTransparency = 0.5;
+                    Position = Dim2(0, 0, 0, -4);
+                    Size = Dim2(1, 0, 0, 9);
+                    ZIndex = 2;
+                    Visible = Library.ElementGlowEnabled;
+                }); Library:Themeify(Items['AccentGlow'], 'ImageColor3', {'Accent'});
+                Library:AddElementGlow(Items['AccentGlow'])
+
                 Items['Holder'] = Library:Create('Frame', {
                     BorderColor3 = Rgb(0, 0, 0);
-                    AnchorPoint = Vec2(0.5, 0.5);
+                    AnchorPoint = Vec2(0, 0.5);
                     Parent = Items['Container'];
                     BackgroundTransparency = 1;
-                    Position = Dim2(0.5, 0, 0.5, 0);
+                    Position = Dim2(0, 4, 0.5, 1);
                     Name = "\0";
                     Active = true;
-                    Size = Dim2(1, 0, 0, 12);
+                    Size = Dim2(0, 0, 0, 14);
+                    AutomaticSize = Enum.AutomaticSize.X;
                     BorderSizePixel = 0;
                     BackgroundColor3 = Rgb(255, 255, 255);
                 });
 
-                Library:Draggify(Items['Holder'], Items['Watermark'])
+                Library:Draggify(Items['Holder'], Items['WatermarkContainer'])
 
                 Library:Create('UIListLayout', {
                     Parent = Items['Holder'];
-                    Padding = Dim(0, 2);
+                    Padding = Dim(0, 4);
                     SortOrder = Enum.SortOrder.LayoutOrder;
                     FillDirection = Enum.FillDirection.Horizontal;
+                    VerticalAlignment = Enum.VerticalAlignment.Center;
                 })
 
                 Library:Create('UIPadding', {
                     Parent = Items['Holder'];
                     PaddingLeft = Dim(0, 4);
-                    PaddingRight = Dim(0, 4);
+                    PaddingRight = Dim(0, 6);
                 });
                 
+                Items['Logo'] = Library:Create('ImageLabel', {
+                    Parent = Items['Holder'];
+                    Name = "\0";
+                    BackgroundTransparency = 1;
+                    Size = UDim2.new(0, 13, 0, 13);
+                    Image = "rbxassetid://123244665811822";
+                    ImageColor3 = Library.CurrentTheme.Accent;
+                    LayoutOrder = -1;
+                }); Library:Themeify(Items['Logo'], 'ImageColor3', {'Accent'});
+
                 Items['Name'] = Library:Create('TextLabel', {
                     FontFace = Library.Font;
                     TextColor3 = Library.CurrentTheme.Text.Main;
@@ -2586,19 +2776,9 @@
                     BorderSizePixel = 0;
                     LayoutOrder = 0;
                     TextSize = 12;
+                    RichText = true;
                     BackgroundColor3 = Rgb(255, 255, 255);
                 }); Library:Themeify(Items['Name'], 'TextColor3', {'Text', 'Main'});
-
-                Items['Logo'] = Library:Create('ImageLabel', {
-                    Parent = Items['Holder'];
-                    Name = "\0";
-                    BackgroundTransparency = 1;
-                    Size = UDim2.new(0, 12, 0, 12);
-                    Image = "rbxassetid://123244665811822";
-                    ImageColor3 = Library.CurrentTheme.Accent;
-                    LayoutOrder = -1;
-                });
-                Library:Themeify(Items['Logo'], 'ImageColor3', {'Accent'});
 
                 Items['Separator'] = Library:Create('TextLabel', {
                     FontFace = Library.Font;
@@ -2610,8 +2790,8 @@
                     AutomaticSize = Enum.AutomaticSize.X;
                     TextSize = 12;
                     LayoutOrder = 1;
-                    TextColor3 = Library.CurrentTheme.Text.Main;
-                }); Library:Themeify(Items['Separator'], 'TextColor3', {'Text', 'Main'});
+                    TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(160, 163, 172);
+                }); Library:Themeify(Items['Separator'], 'TextColor3', {'Text', 'Unselected'});
 
                 Items['Labels'] = { }; 
                 Items['Separators'] = { }; 
@@ -2626,8 +2806,7 @@
                             AnchorPoint = Vec2(0, 0.5);
                             Size = Dim2(0, 0, 0, 12);
                             BackgroundTransparency = 1;
-                            AutomaticSize = Enum.AutomaticSize.XY;
-                            Size = Dim2(0, 0, 0, 12);
+                            AutomaticSize = Enum.AutomaticSize.X;
                             TextSize = 12;
                             LayoutOrder = Index * 2;
                             Active = false;
@@ -2649,8 +2828,8 @@
                                 Active = false;
                                 Selectable = false;
                                 LayoutOrder = Index * 2 + 1;
-                                TextColor3 = Library.CurrentTheme.Text.Main;
-                            }); Library:Themeify(Seperator, 'TextColor3', {'Text', 'Main'});
+                                TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(160, 163, 172);
+                            }); Library:Themeify(Seperator, 'TextColor3', {'Text', 'Unselected'});
                             Insert(Items['Separators'], Seperator)
 
                         end
@@ -2713,6 +2892,16 @@
 
                 return ''
             end
+
+            function Cfg:Visible(state)
+                if Items['WatermarkContainer'] then
+                    Items['WatermarkContainer'].Visible = state
+                end
+            end
+
+            function Cfg:SetVisible(state)
+                Cfg:Visible(state)
+            end
             
             local WatermarkThread = task.spawn(function()
                 while task.wait(0.1) do
@@ -2726,6 +2915,8 @@
                 end
             end)
             Insert(Library.Threads, WatermarkThread)
+
+            Library.WatermarkInstance = Cfg
             
             return SetMetaTbl(Cfg, Library);
         end
@@ -2777,6 +2968,22 @@
                 BorderSizePixel = 0;
                 BackgroundColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
             }); Library:Themeify(Items['Line'], 'BackgroundColor3', {'Accent'});
+
+            Items['LineGlow'] = Library:Create('ImageLabel', {
+                Parent = Items['Line'];
+                Name = "\0";
+                BackgroundTransparency = 1;
+                Image = "rbxassetid://1316045217";
+                ImageColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+                ImageTransparency = 0.45;
+                Position = Dim2(0, -6, 0, -6);
+                Size = Dim2(1, 12, 1, 12);
+                ZIndex = 3;
+                Visible = false;
+            }); Library:Themeify(Items['LineGlow'], 'ImageColor3', {'Accent'});
+            Library:AddElementGlow(Items['LineGlow'], function()
+                return Items['Line'].Visible
+            end)
 
             Items['Page'] = Library:Create('ScrollingFrame', {
                 Parent = self.Items['Container'];
@@ -2874,6 +3081,10 @@
 
                 for _, v in { Tab.Line, Tab.Page } do
                     if v then v.Visible = State end
+                end
+
+                if Tab.LineGlow then
+                    Tab.LineGlow.Visible = State and (Library.ElementGlowEnabled == true)
                 end
 
                 Library:Tween(Tab.Title, {
@@ -3101,12 +3312,6 @@
                     end
                 end)
 
-            end
-
-            for _, Element in next, Library.Elements do
-                if Element.GetKey and Element.Name then
-                    Cfg:AddEntry(Element)
-                end
             end
 
             return SetMetaTbl(Cfg, Library)
@@ -3472,6 +3677,22 @@
                     BackgroundColor3 = Rgb(255, 255, 255);
                 });
 
+                Items['Glow'] = Library:Create('ImageLabel', {
+                    Parent = Items['Holder'];
+                    Name = "\0";
+                    BackgroundTransparency = 1;
+                    Image = "rbxassetid://1316045217";
+                    ImageColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+                    ImageTransparency = 0.5;
+                    Position = Dim2(0, -6, 0, -6);
+                    Size = Dim2(1, 12, 1, 12);
+                    ZIndex = 0;
+                    Visible = false;
+                }); Library:Themeify(Items['Glow'], 'ImageColor3', {'Accent'});
+                Library:AddElementGlow(Items['Glow'], function()
+                    return Cfg.Enabled
+                end)
+
                 Items['Button'] = Library:Create('TextButton', {
                     Parent = Items['Holder'];
                     Name = "\0";
@@ -3592,6 +3813,10 @@
                         })
                     )
 
+                if Items['Glow'] then
+                    Items['Glow'].Visible = State and (Library.ElementGlowEnabled == true)
+                end
+
                 if not SkipCallback then
                     Cfg.Callback(State)
                 end
@@ -3681,16 +3906,46 @@
                     Parent = self.Items['Container'];
                 });
 
+                Items['Minus'] = Library:Create('TextButton', {
+                    Parent = Items['Slider'];
+                    Name = "\0";
+                    Text = "-";
+                    FontFace = Library.Font;
+                    TextSize = 13;
+                    TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(160, 163, 172);
+                    BackgroundTransparency = 1;
+                    BorderSizePixel = 0;
+                    AnchorPoint = Vec2(0, 1);
+                    Position = Dim2(0, 0, 1, 0);
+                    Size = Dim2(0, 12, 0, 10);
+                    AutoButtonColor = false;
+                }); Library:Themeify(Items['Minus'], 'TextColor3', {'Text', 'Unselected'});
+
+                Items['Plus'] = Library:Create('TextButton', {
+                    Parent = Items['Slider'];
+                    Name = "\0";
+                    Text = "+";
+                    FontFace = Library.Font;
+                    TextSize = 13;
+                    TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(160, 163, 172);
+                    BackgroundTransparency = 1;
+                    BorderSizePixel = 0;
+                    AnchorPoint = Vec2(1, 1);
+                    Position = Dim2(1, 0, 1, 0);
+                    Size = Dim2(0, 12, 0, 10);
+                    AutoButtonColor = false;
+                }); Library:Themeify(Items['Plus'], 'TextColor3', {'Text', 'Unselected'});
+
                 Items['Holder'] = Library:Create('Frame', {
                     BorderColor3 = Rgb(0, 0, 0);
                     AnchorPoint = Vec2(0, 1);
                     Name = "\0";
                     LayoutOrder = 1;
-                    Position = Dim2(0, 0, 1, 0);
+                    Position = Dim2(0, 16, 1, 0);
                     Parent = Items['Slider'];
                     BackgroundTransparency = 0;
                     BackgroundColor3 = Rgb(255, 255, 255);
-                    Size = Dim2(1, 0, 0, 10);
+                    Size = Dim2(1, -32, 0, 10);
                     BorderSizePixel = 0;
                 })
 
@@ -3744,22 +3999,23 @@
                     PaddingLeft = Dim(0, -1);
                     PaddingTop = Dim(0, -4)
                 })
-                Items['Value'] = Library:Create( "TextLabel" , {
-                    FontFace = Library.Font;
-                    TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224);
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Text = "0" .. Cfg.Suffix;
+
+                Items['FillGlow'] = Library:Create('ImageLabel', {
                     Parent = Items['Holder'];
-                    AnchorPoint = Vec2(0.5, 0.5);
                     Name = "\0";
-                    ZIndex = 2;
                     BackgroundTransparency = 1;
-                    Position = Dim2(0.5, 0, 0.5, -1);
-                    Size = Dim2(0, 26, 0, 12);
-                    BorderSizePixel = 0;
-                    TextSize = 12;
-                    BackgroundColor3 = Rgb(0, 0, 0);
-                }); Library:Themeify(Items['Value'], 'TextColor3', {'Text', 'Main'});
+                    Image = "rbxassetid://1316045217";
+                    ImageColor3 = Library.CurrentTheme.Accent or Rgb(64, 185, 230);
+                    ImageTransparency = 0.55;
+                    Position = Dim2(0, -6, 0, -6);
+                    Size = Dim2(0, 12, 1, 12);
+                    ZIndex = 1;
+                    Visible = false;
+                }); Library:Themeify(Items['FillGlow'], 'ImageColor3', {'Accent'});
+                Library:AddElementGlow(Items['FillGlow'], function()
+                    local p = (Cfg.Value - Cfg.Min) / (Cfg.Max - Cfg.Min)
+                    return p > 0.01
+                end)
 
                 Items['Fill'] = Library:Create('Frame', {
                     Parent = Items['Holder'];
@@ -3770,6 +4026,7 @@
                     BorderSizePixel = 0;
                     BackgroundColor3 = Rgb(255, 255, 255);
                     ClipsDescendants = true;
+                    ZIndex = 2;
                 });
 
                 Items['FillGradient'] = Library:Create('UIGradient', {
@@ -3780,6 +4037,23 @@
                         ColorKey(1, Rgb(121, 92, 51));
                     });
                 }); Library:Themeify(Items['FillGradient'], 'Color', {'Gradients', 'ElementActive'});
+
+                Items['Value'] = Library:Create( "TextLabel" , {
+                    FontFace = Library.Font;
+                    TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224);
+                    BorderColor3 = Rgb(0, 0, 0);
+                    Text = "0" .. Cfg.Suffix;
+                    Parent = Items['Holder'];
+                    AnchorPoint = Vec2(0.5, 0.5);
+                    Name = "\0";
+                    ZIndex = 3;
+                    BackgroundTransparency = 1;
+                    Position = Dim2(0.5, 0, 0.5, -1);
+                    Size = Dim2(0, 26, 0, 12);
+                    BorderSizePixel = 0;
+                    TextSize = 12;
+                    BackgroundColor3 = Rgb(0, 0, 0);
+                }); Library:Themeify(Items['Value'], 'TextColor3', {'Text', 'Main'});
                 
             end
             --
@@ -3789,6 +4063,11 @@
                 local Percent = (Cfg.Value - Cfg.Min) / (Cfg.Max - Cfg.Min)
 
                 Items.Fill.Size = Dim2(Percent, 0, 1, -2)
+
+                if Items.FillGlow then
+                    Items.FillGlow.Size = Dim2(Percent, 12, 1, 12)
+                    Items.FillGlow.Visible = (Library.ElementGlowEnabled == true) and (Percent > 0.01)
+                end
 
                 local Fmt = "%." .. Cfg.Decimals .. "f"
 
@@ -3833,6 +4112,40 @@
             end
 
             --
+
+            -- Minus & Plus hover & step interactions
+            local function GetStep()
+                if Cfg.Increment and Cfg.Increment > 0 then
+                    return Cfg.Increment
+                elseif Cfg.Decimals and Cfg.Decimals > 0 then
+                    return 1 / (10 ^ Cfg.Decimals)
+                end
+                return 1
+            end
+
+            Library:Connect(Items.Minus.MouseEnter, function()
+                Library:Tween(Items.Minus, { TextColor3 = Library.CurrentTheme.Accent or Rgb(64, 185, 230) })
+            end)
+
+            Library:Connect(Items.Minus.MouseLeave, function()
+                Library:Tween(Items.Minus, { TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(160, 163, 172) })
+            end)
+
+            Library:Connect(Items.Minus.MouseButton1Click, function()
+                Cfg:Set(Cfg.Value - GetStep())
+            end)
+
+            Library:Connect(Items.Plus.MouseEnter, function()
+                Library:Tween(Items.Plus, { TextColor3 = Library.CurrentTheme.Accent or Rgb(64, 185, 230) })
+            end)
+
+            Library:Connect(Items.Plus.MouseLeave, function()
+                Library:Tween(Items.Plus, { TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(160, 163, 172) })
+            end)
+
+            Library:Connect(Items.Plus.MouseButton1Click, function()
+                Cfg:Set(Cfg.Value + GetStep())
+            end)
 
             --
             Library:Connect(Items.Holder.InputBegan, function(Input)
@@ -4976,6 +5289,20 @@
                     BackgroundColor3 = Rgb(255, 255, 255);
                 });
 
+                Items['Glow'] = Library:Create('ImageLabel', {
+                    Parent = Items['Bind'];
+                    Name = "\0";
+                    BackgroundTransparency = 1;
+                    Image = "rbxassetid://1316045217";
+                    ImageColor3 = Cfg.Default or Rgb(255, 0, 0);
+                    ImageTransparency = 0.5;
+                    Position = Dim2(0, -6, 0, -6);
+                    Size = Dim2(1, 12, 1, 12);
+                    ZIndex = 1;
+                    Visible = Library.ElementGlowEnabled == true;
+                });
+                Library:AddElementGlow(Items['Glow'])
+
                 Items['Gradient'] = Library:Create('UIGradient', {
                     Parent = Items['Bind'];
                     Color =  ColorSeq({
@@ -5050,6 +5377,10 @@
                     ColorKey(0, Color),
                     ColorKey(1, Library.CurrentTheme.Background or Rgb(32, 33, 37))
                 })
+
+                if self.Items['Glow'] and typeof(Color) == "Color3" then
+                    self.Items['Glow'].ImageColor3 = Color
+                end
 
                 if typeof(Color) == "Color3" then
                     self.Callback(Color, self.Alpha)
@@ -5689,6 +6020,12 @@
                 end)
 
                 return EntryItems
+            end
+
+            for _, Element in next, Library.Elements do
+                if Element.GetKey and Element.Name then
+                    Cfg:AddEntry(Element)
+                end
             end
 
             return SetMetaTbl(Cfg, Library)
