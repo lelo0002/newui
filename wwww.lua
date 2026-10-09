@@ -1,4 +1,4 @@
---
+--2323
 
 --
 
@@ -176,6 +176,27 @@
         Library.BlurEnabled = false
         Library.BlurSize = 20
         Library.BlurEffect = nil
+        Library.Visible = true
+
+        Library.Colorpickers = {}
+        Library.ActiveColorpicker = nil
+
+        function Library:CloseColorpickers()
+            if Library.ActiveColorpicker then
+                local Active = Library.ActiveColorpicker
+                Active.Open = false
+                if Active.Keypicker and Active.Keypicker.Items and Active.Keypicker.Items['Picker'] then
+                    Active.Keypicker.Items['Picker'].Visible = false
+                end
+                Library.ActiveColorpicker = nil
+            end
+            for _, Cp in ipairs(Library.Colorpickers or {}) do
+                Cp.Open = false
+                if Cp.Keypicker and Cp.Keypicker.Items and Cp.Keypicker.Items['Picker'] then
+                    Cp.Keypicker.Items['Picker'].Visible = false
+                end
+            end
+        end
 
         function Library:SetBlur(state, size)
             local Lighting = FetchService['Lighting'] or game:GetService('Lighting')
@@ -193,7 +214,9 @@
             if state ~= nil then
                 Library.BlurEnabled = state
             end
-            local shouldShow = (Library.BlurEnabled == true) and (Library.Holder and Library.Holder.Enabled ~= false)
+            local holderEnabled = (not Library.Holder) or (Library.Holder.Enabled ~= false)
+            local isUiVisible = (Library.Visible ~= false) and holderEnabled
+            local shouldShow = (Library.BlurEnabled == true) and isUiVisible
             Library.BlurEffect.Enabled = shouldShow
         end
 
@@ -204,8 +227,8 @@
         ]]
         Library.ElementGlowEnabled = true
         Library.ElementGlowList = {}
-        Library.ElementGlowSize = 6          -- spread in pixels
-        Library.ElementGlowOpacity = 0.5     -- 0..1 strength of the innermost layer
+        Library.ElementGlowSize = 16         -- spread in pixels (default 16px)
+        Library.ElementGlowOpacity = 0.08    -- 0..1 strength of the innermost layer (default 8%)
 
         local GLOW_LAYERS = 5
 
@@ -345,7 +368,7 @@
 
         -- Spread in pixels (0 hides all glows)
         function Library:SetElementGlowSize(Size)
-            Library.ElementGlowSize = Clamp(tonumber(Size) or 0, 0, 24)
+            Library.ElementGlowSize = Clamp(tonumber(Size) or 0, 0, 32)
 
             for Index = #Library.ElementGlowList, 1, -1 do
                 local Entry = Library.ElementGlowList[Index]
@@ -1649,6 +1672,10 @@
         end
 
         function Library:Unload()
+            if Library.CloseColorpickers then
+                Library:CloseColorpickers()
+            end
+
             for _, Connection in Library['Connections'] do
                 Connection:Disconnect();
             end
@@ -1911,10 +1938,13 @@
         end
         
         function Cfg:Visible(Value)
-            if Value then
-                Items['Window'].Visible = true;
-            else
-                Items['Window'].Visible = false;
+            local state = Value and true or false
+            Items['Window'].Visible = state;
+            Library.Visible = state;
+            if not state then
+                if Library.CloseColorpickers then
+                    Library:CloseColorpickers()
+                end
             end
             if Library.SetBlur then
                 Library:SetBlur()
@@ -3085,11 +3115,31 @@
                 Text = '',
             });
 
+            -- Vertical indicator line before tab title (visible on all tabs: subtle border color when inactive, accent when active)
+            Items['Line'] = Library:Create( 'Frame', {
+                Parent = Items['Button'];
+                Name = "\0";
+                Size = Dim2(0, 2, 0, 14);
+                Position = Dim2(0, 0, 0.5, -7);
+                BorderColor3 = Rgb(0, 0, 0);
+                ZIndex = 4;
+                BorderSizePixel = 0;
+                BackgroundColor3 = Library.CurrentTheme.Borders.Inline or Rgb(79, 82, 87);
+                Visible = true;
+            });
+
+            Items['LineGlow'] = Library:CreateGlow(Items['Line'], {
+                ZIndex = 3;
+                Condition = function()
+                    return (self.TabMeta == Items)
+                end;
+            })
+
             Items['Title']  = Library:Create( 'TextLabel', {
                 Parent = Items['Button'];
                 Name = "\0";
-                Position = Dim2FromOffset(4, 0);
-                Size = Dim2FromScale(1, 1);
+                Position = Dim2FromOffset(10, 0);
+                Size = Dim2(1, -10, 1, 0);
                 BorderSizePixel = 0;
                 BackgroundTransparency = 1;
                 TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(175, 175, 175);
@@ -3099,27 +3149,7 @@
                 TextSize = 13;
                 Text = Cfg.Name;
                 AutomaticSize = Enum.AutomaticSize.X;
-            }); Library:Themeify(Items['Title'], 'TextColor3', {'Text', 'Unselected'});
-            
-            -- Active indicator vertical line
-            Items['Line'] = Library:Create( 'Frame', {
-                Parent = Items['Button'];
-                Name = "\0";
-                Size = Dim2(0, 2, 1, -6);
-                Visible = false;
-                Position = Dim2(0, -8, 0, 3);
-                BorderColor3 = Rgb(0, 0, 0);
-                ZIndex = 4;
-                BorderSizePixel = 0;
-                BackgroundColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
-            }); Library:Themeify(Items['Line'], 'BackgroundColor3', {'Accent'});
-
-            Items['LineGlow'] = Library:CreateGlow(Items['Line'], {
-                ZIndex = 3;
-                Condition = function()
-                    return Items['Line'].Visible
-                end;
-            })
+            });
 
             Items['Page'] = Library:Create('ScrollingFrame', {
                 Parent = self.Items['Container'];
@@ -3210,13 +3240,26 @@
         task.defer(UpdateCanvas)
 
         function Cfg.OpenTab()
+            if self.TabMeta == Items then return end
+
+            if Library.CloseColorpickers then
+                Library:CloseColorpickers()
+            end
+
             local Current = self.TabMeta
 
             local function Toggle(Tab, State)
                 if not Tab or not Tab.Button then return end
 
-                for _, v in { Tab.Line, Tab.Page } do
-                    if v then v.Visible = State end
+                if Tab.Page then
+                    Tab.Page.Visible = State
+                end
+
+                if Tab.Line then
+                    Tab.Line.Visible = true
+                    Tab.Line.BackgroundColor3 = State
+                        and (Library.CurrentTheme.Accent or Rgb(221, 168, 93))
+                        or (Library.CurrentTheme.Borders.Inline or Rgb(79, 82, 87))
                 end
 
                 if Tab.LineGlow then
@@ -3245,6 +3288,9 @@
             Items.Title.TextColor3 = Selected
                 and (Library.CurrentTheme.Accent or Rgb(221, 168, 93))
                 or (Library.CurrentTheme.Text.Unselected or Rgb(175, 175, 175))
+            Items.Line.BackgroundColor3 = Selected
+                and (Library.CurrentTheme.Accent or Rgb(221, 168, 93))
+                or (Library.CurrentTheme.Borders.Inline or Rgb(79, 82, 87))
         end)
 
         Library:Connect(Items.Button.MouseEnter, function()
@@ -5452,6 +5498,8 @@
                 }); Library:Themeify(Items['Inline'], 'Color', {'Borders', 'Inline'});
 
                 Library.Elements[Cfg.Flag] = Cfg
+                Library.Colorpickers = Library.Colorpickers or {}
+                Insert(Library.Colorpickers, Cfg)
 
             end
             --
@@ -5523,13 +5571,24 @@
             end
 
             function Cfg:OpenPicker()
+                if Library.Visible == false then return end
                 local Picker = self.Keypicker.Items['Picker']
 
-                self.Open = not self.Open
-
-                Picker.Visible = self.Open
-
                 if self.Open then
+                    self.Open = false
+                    Picker.Visible = false
+                    if Library.ActiveColorpicker == self then
+                        Library.ActiveColorpicker = nil
+                    end
+                else
+                    if Library.CloseColorpickers then
+                        Library:CloseColorpickers()
+                    end
+
+                    self.Open = true
+                    Picker.Visible = true
+                    Library.ActiveColorpicker = self
+
                     self:UpdatePickerPosition()
 
                     self.Keypicker:SetColor(
