@@ -1,5 +1,4 @@
---
-
+--23
 --
 
     local FetchService = setmetatable({}, {
@@ -138,31 +137,59 @@
             };
         };
 
+        Library.GlowElements = {}
+        Library.GlowAmount = 0
+
+        function Library:SetGlowAmount(amount)
+            Library.GlowAmount = amount
+            for _, data in ipairs(Library.GlowElements) do
+                local obj = data.Obj
+                local base = data.Base
+                if obj and obj.Parent then
+                    obj.ImageTransparency = math.clamp(1 - ((1 - base) * amount), 0, 1)
+                end
+            end
+        end
+
+        function Library:AddGlow(obj, baseTransparency)
+            table.insert(Library.GlowElements, { Obj = obj, Base = baseTransparency })
+            obj.ImageTransparency = math.clamp(1 - ((1 - baseTransparency) * Library.GlowAmount), 0, 1)
+        end
+
+
         local Fonts = { }; do
+
             function RegisterFont(Name, Weight, Style, Asset)
-                if not isfile(Asset.Id) then
-                    writefile(Asset.Id, Asset.Font)
+                if not isfile or not writefile or not getcustomasset then
+                    return nil
                 end
+                
+                local success, result = pcall(function()
+                    if not isfile(Asset.Id) then
+                        writefile(Asset.Id, Asset.Font)
+                    end
 
-                if isfile(Name .. ".font") then
-                    delfile(Name .. ".font")
-                end
+                    if isfile(Name .. ".font") then
+                        if delfile then delfile(Name .. ".font") end
+                    end
 
-                local Data = {
-                    name = Name,
-                    faces = {
-                        {
-                            name = "Normal",
-                            weight = Weight,
-                            style = Style,
-                            assetId = getcustomasset(Asset.Id),
+                    local Data = {
+                        name = Name,
+                        faces = {
+                            {
+                                name = "Normal",
+                                weight = Weight,
+                                style = Style,
+                                assetId = getcustomasset(Asset.Id),
+                            },
                         },
-                    },
-                }
+                    }
 
-                writefile(Name .. ".font", HttpService:JSONEncode(Data))
-
-                return getcustomasset(Name .. ".font");
+                    local HttpService = game:GetService("HttpService")
+                    writefile(Name .. ".font", HttpService:JSONEncode(Data))
+                    return getcustomasset(Name .. ".font")
+                end)
+                return success and result or nil
             end
             
             local Verdana = RegisterFont("Verawdawdawdwaddana", 400, "Normal", {
@@ -170,10 +197,50 @@
                 Font = game:HttpGet("https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/fs-tahoma-8px.ttf"),
             })
 
-            Library.Font = Font.new(Verdana, Enum.FontWeight.Regular, Enum.FontStyle.Normal);
+            if Verdana then
+                Library.Font = Font.new(Verdana, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+            else
+                Library.Font = Font.fromEnum(Enum.Font.Code)
+            end
+
         end
         
     local Themes = {
+    ['fatal'] = {
+        ['Accent'] = Rgb(180, 200, 255),
+        ['Borders'] = {
+            ['Outline'] = Rgb(5, 8, 12),
+            ['Inline']  = Rgb(58, 67, 82),
+        },
+        ['Background'] = Rgb(22, 25, 32),
+        ['Text'] = {
+            ['Main']       = Rgb(225, 230, 240),
+            ['Unselected'] = Rgb(145, 152, 165),
+        },
+        ['Gradients'] = {
+            ['Tab'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['Base'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['ElementBase'] = ColorSeq({
+                ColorKey(0, Rgb(52, 58, 72)),
+                ColorKey(1, Rgb(31, 35, 44)),
+            }),
+            ['ElementActive'] = ColorSeq({
+                ColorKey(0, Rgb(180, 200, 255)),
+                ColorKey(1, Rgb(130, 160, 230)),
+            }),
+            ['Container'] = ColorSeq({
+                ColorKey(0, Rgb(36, 40, 50)),
+                ColorKey(1, Rgb(28, 31, 39)),
+            }),
+        },
+    },
+
     ['Preset'] = {
         ['Accent'] = Rgb(88, 166, 255),
 
@@ -1330,211 +1397,237 @@
         --  Library ->
 
         function Library:Window(params)
-            local Cfg = {
-                Name = (params.Name or params.name) or 'Home',
-                Size = (params.Size or params.size) or Dim2(0, 510, 0, 550),
+        local Cfg = {
+            Name = (params.Name or params.name) or 'Home',
+            Size = (params.Size or params.size) or Dim2(0, 560, 0, 420),
 
-                TabMeta;
-                Items = { };
-            };
+            TabMeta = nil,
+            Items = { };
+        };
 
-            Library.Holder = Library.Holder or Library:Create("ScreenGui", {
-                Name = '\0',
-                ResetOnSpawn = false,
-                IgnoreGuiInset = true,
-                ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-                Parent = LocalPlayer.PlayerGui or CoreGui;
+        Library.Holder = Library.Holder or Library:Create("ScreenGui", {
+            Name = '\0',
+            ResetOnSpawn = false,
+            IgnoreGuiInset = true,
+            ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+            Parent = LocalPlayer.PlayerGui or CoreGui;
+        });
+
+        Library.Extras = Library.Extras or Library:Create('ScreenGui', {
+            Name = '\0',
+            ResetOnSpawn = false,
+            IgnoreGuiInset = true,
+            ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+            Parent = LocalPlayer.PlayerGui or CoreGui;
+        });
+
+        local Items = Cfg.Items; do
+
+            Items['Window'] = Library:Create( "Frame", {
+                Parent = Library.Holder;
+                Name = "\0";
+                Position = UDim2.new(0.5, -(Cfg.Size.X.Offset/2), 0.5, -(Cfg.Size.Y.Offset/2));
+                BorderColor3 = Rgb(0, 0, 0);
+                Size = Cfg.Size;
+                BorderSizePixel = 0;
+                Visible = true;
+                BackgroundTransparency = 0;
+                BackgroundColor3 = Rgb(255, 255, 255);
+            });
+            Items['Glow1'] = Library:Create("ImageLabel", {
+                Name = "\0",
+                BackgroundTransparency = 1,
+                Image = "rbxassetid://1316045217",
+                ImageColor3 = Library.CurrentTheme.Accent,
+                ImageTransparency = 0.65,
+                Position = UDim2.new(0, -25, 0, -25),
+                Size = UDim2.new(1, 50, 1, 50),
+                ZIndex = 0,
+                Parent = Items['Window'],
+            })
+            Library:Themeify(Items['Glow1'], 'ImageColor3', {'Accent'})
+            Library:AddGlow(Items['Glow1'], 0.65)
+
+            Items['Glow2'] = Library:Create("ImageLabel", {
+                Name = "\0",
+                BackgroundTransparency = 1,
+                Image = "rbxassetid://1316045217",
+                ImageColor3 = Library.CurrentTheme.Accent,
+                ImageTransparency = 0.85,
+                Position = UDim2.new(0, -50, 0, -50),
+                Size = UDim2.new(1, 100, 1, 100),
+                ZIndex = -1,
+                Parent = Items['Window'],
+            })
+            Library:Themeify(Items['Glow2'], 'ImageColor3', {'Accent'})
+            Library:AddGlow(Items['Glow2'], 0.85)
+
+
+            Items['TopAccent'] = Library:Create('Frame', {
+                Parent = Items['Window'];
+                Name = "\0";
+                Position = Dim2(0, 0, 0, 0);
+                Size = Dim2(1, 0, 0, 1);
+                BorderSizePixel = 0;
+                BackgroundColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+                ZIndex = 5;
+            }); Library:Themeify(Items['TopAccent'], 'BackgroundColor3', {'Accent'});
+
+
+            Items['Gradient'] = Library:Create('UIGradient', {
+                Parent = Items['Window'];
+                Name = "\0";
+                Color = Library.CurrentTheme.Gradients.Base or ColorSeq({
+                    ColorKey(0, Rgb(45, 48, 55)),
+                    ColorKey(1, Rgb(32, 33, 37))
+                });
+                Rotation = 90;
+            }); Library:Themeify(Items['Gradient'], 'Color', {'Gradients', 'Base'});
+
+            Items['Outline'] = Library:Create('UIStroke', {
+                Parent = Items['Window'];
+                Name = "\0";
+                Color = Library.CurrentTheme.Borders.Outline or Rgb(0, 0, 0);
+                Thickness = 1;
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
+                LineJoinMode = Enum.LineJoinMode.Miter;
+            }); Library:Themeify(Items['Outline'], 'Color', {'Borders', 'Outline'});
+            
+            Items['Inline'] = Library:Create('UIStroke', {
+                Parent = Items['Window'];
+                Name = "\0";
+                Color = Library.CurrentTheme.Borders.Inline or Rgb(0, 0, 0);
+                Thickness = 1;
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
+                LineJoinMode = Enum.LineJoinMode.Miter;
+                BorderStrokePosition = Enum.BorderStrokePosition.Inner;
+            }); Library:Themeify(Items['Inline'], 'Color', {'Borders', 'Inline'});
+
+            -- >>> SIDEBAR LAYOUT BEGIN <<<
+            Items['Sidebar'] = Library:Create('Frame', {
+                Parent = Items['Window'];
+                Name = "Sidebar";
+                Position = Dim2(0, 0, 0, 0);
+                Size = Dim2(0, 130, 1, 0);
+                BackgroundTransparency = 1;
             });
 
-            Library.Extras = Library.Extras or Library:Create('ScreenGui', {
-                Name = '\0',
-                ResetOnSpawn = false,
-                IgnoreGuiInset = true,
-                ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-                Parent = LocalPlayer.PlayerGui or CoreGui;
+            Items['Top'] = Library:Create( 'Frame', {
+                Parent = Items['Sidebar'];
+                Name = "\0";
+                Position = Dim2(0, 0, 0, 0);
+                Size = Dim2(1, 0, 0, 50);
+                BackgroundTransparency = 1;
+            });
+        
+            
+            Items['Logo'] = Library:Create('ImageLabel', {
+                Parent = Items['Top'];
+                Name = "\0";
+                Position = Dim2(0, 15, 0, 10);
+                Size = Dim2(0, 30, 0, 30);
+                BackgroundTransparency = 1;
+                Image = "rbxassetid://123244665811822";
+                ImageColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+            }); Library:Themeify(Items['Logo'], 'ImageColor3', {'Accent'});
+
+            Items['Title'] = Library:Create( 'TextLabel', {
+                Parent = Items['Top'];
+                Name = "\0";
+                Position = Dim2(0, 50, 0, 15);
+                Size = Dim2(1, -65, 0, 20);
+                BackgroundTransparency = 1;
+                TextColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+                TextXAlignment = Enum.TextXAlignment.Left;
+                FontFace = Library.Font;
+                TextSize = 16;
+                Text = Cfg.Name;
+            }); Library:Themeify(Items['Title'], 'TextColor3', {'Accent'});
+
+            -- Separator Line between Sidebar and Container
+            Items['Separator'] = Library:Create('Frame', {
+                Parent = Items['Window'];
+                Position = Dim2(0, 130, 0, 12);
+                Size = Dim2(0, 1, 1, -24);
+                BorderSizePixel = 0;
+                BackgroundColor3 = Library.CurrentTheme.Borders.Inline or Rgb(79, 82, 87);
+            }); Library:Themeify(Items['Separator'], 'BackgroundColor3', {'Borders', 'Inline'});
+            
+            Items['Container'] = Library:Create( 'Frame', {
+                Parent = Items['Window'];
+                Name = "\0";
+                AnchorPoint = Vec2(0, 0);
+                Position = Dim2(0, 131, 0, 12);
+                Size = Dim2(1, -143, 1, -24);
+                BackgroundTransparency = 1;
             });
 
-            local Items = Cfg.Items; do
+            Library:Create('UIPadding', {
+                Parent = Items['Container'];
+                PaddingTop = Dim(0, 2);
+                PaddingLeft = Dim(0, 2);
+            });
 
-                Items['Window'] = Library:Create( "Frame", {
-                    Parent = Library.Holder;
-                    Name = "\0";
-                    Position = Dim2(0, 0, 0, 0);
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Size = Cfg.Size or Dim2(0, 510, 0, 550);
-                    BorderSizePixel = 0;
-                    Visible = true;
-                    BackgroundTransparency = 0;
-                    BackgroundColor3 = Rgb(255, 255, 255);
-                });
+            Library:Create('UIListLayout', {
+                Parent = Items['Container'];
+                FillDirection = Enum.FillDirection.Horizontal;
+                HorizontalFlex = Enum.UIFlexAlignment.Fill;
+                SortOrder = Enum.SortOrder.LayoutOrder;
+                VerticalFlex = Enum.UIFlexAlignment.Fill;
+            });
 
-                Items['Gradient'] = Library:Create('UIGradient', {
-                    Parent = Items['Window'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Gradients.Base or ColorSeq({
-                        ColorKey(0, Rgb(45, 48, 55)),
-                        ColorKey(1, Rgb(32, 33, 37))
-                    });
-                    Rotation = 90;
-                }); Library:Themeify(Items['Gradient'], 'Color', {'Gradients', 'Base'});
+            -- Tabs Container
+            Items['Tabs'] = Library:Create( 'Frame', {
+                Parent = Items['Sidebar'];
+                Name = "\0";
+                BackgroundTransparency = 1;
+                Position = Dim2(0, 0, 0, 50);
+                Size = Dim2(1, 0, 1, -60);
+                ZIndex = 2;
+            });
 
-                Items['Outline'] = Library:Create('UIStroke', {
-                    Parent = Items['Window'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Borders.Outline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                }); Library:Themeify(Items['Outline'], 'Color', {'Borders', 'Outline'});
-                
-                Items['Inline'] = Library:Create('UIStroke', {
-                    Parent = Items['Window'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Borders.Inline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                    BorderStrokePosition = Enum.BorderStrokePosition.Inner;
-                }); Library:Themeify(Items['Inline'], 'Color', {'Borders', 'Inline'});
+            Library:Create('UIListLayout', {
+                Parent = Items['Tabs'];
+                Padding = Dim(0, 4);
+                VerticalAlignment = Enum.VerticalAlignment.Top;
+                HorizontalAlignment = Enum.HorizontalAlignment.Left;
+                FillDirection = Enum.FillDirection.Vertical;
+                SortOrder = Enum.SortOrder.LayoutOrder
+            });
 
-                Items['Top'] = Library:Create( 'Frame', {
-                    Parent = Items['Window'];
-                    Name = "\0";
-                    Position = Dim2(0, 0, 0, 0);
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(1, 0, 0, 20);
-                    BorderSizePixel = 0;
-                    BackgroundTransparency = 1;
-                    BackgroundColor3 = Rgb(1, 1, 1);
-                });
-            
-                Items['Title'] = Library:Create( 'TextLabel', {
-                    Parent = Items['Top'];
-                    Name = "\0";
-                    Position = Dim2(0, 6, 0, 5);
-                    Size = Dim2(1, -12, 0, 12);
-                    BorderSizePixel = 0;
-                    BackgroundTransparency = 1;
-                    TextColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
-                    TextXAlignment = Enum.TextXAlignment.Left;
-                    FontFace = Library.Font;
-                    TextSize = 12;
-                    Text = Cfg.Name;
-                }); Library:Themeify(Items['Title'], 'TextColor3', {'Accent'});
-                
-                Items['Container'] = Library:Create( 'Frame', {
-                    Parent = Items['Window'];
-                    Name = "\0";
-                    AnchorPoint = Vec2(0.5, 0);
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Position = Dim2(0.5, 0, 0, 44);
-                    Size = Dim2(1, -12, 1, -50);
-                    BorderSizePixel = 0;
-                    BackgroundTransparency = 1;
-                    BackgroundColor3 = Rgb(1, 1, 1);
-                });
-
-                Items['ContainerGradient'] = Library:Create( 'UIGradient', {
-                    Parent = Items['Container'];
-                    Color = Library.CurrentTheme.Gradients.Container or ColorSeq({
-                        ColorKey(0, Rgb(45, 48, 55)),
-                        ColorKey(1, Rgb(45, 48, 53))
-                    });
-                    Rotation = 90;
-                }); Library:Themeify(Items['ContainerGradient'], 'Color', {'Gradients', 'Container'});
-
-                Items['ContainerOutline'] = Library:Create( 'UIStroke', {
-                    Parent = Items['Container'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Borders.Outline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                }); Library:Themeify(Items['ContainerOutline'], 'Color', {'Borders', 'Outline'});
-                
-                Items['ContainerInline'] = Library:Create( 'UIStroke', {
-                    Parent = Items['Container'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Borders.Inline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                    BorderStrokePosition = Enum.BorderStrokePosition.Inner;
-                }); Library:Themeify(Items['ContainerInline'], 'Color', {'Borders', 'Inline'});
-
-                Library:Create('UIPadding', {
-                    Parent = Items['Container'];
-                    PaddingTop = Dim(0, 2);
-                    PaddingLeft = Dim(0, 2);
-                });
-
-                Library:Create('UIListLayout', {
-                    Parent = Items['Container'];
-                    FillDirection = Enum.FillDirection.Horizontal;
-                    HorizontalFlex = Enum.UIFlexAlignment.Fill;
-                    SortOrder = Enum.SortOrder.LayoutOrder;
-                    VerticalFlex = Enum.UIFlexAlignment.Fill;
-                });
-
-                --
-
-                -- Tabs
-                Items['Tabs'] = Library:Create( 'Frame', {
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Parent = Items['Window'];
-                    Name = "\0";
-                    BackgroundTransparency = 1;
-                    Position = Dim2(0, 6, 0, 18);
-                    Size = Dim2(1, -12, 0, 25);
-                    ZIndex = 2;
-                    BorderSizePixel = 0;
-                    BackgroundColor3 = Rgb(1, 1, 1);
-                });
-
-                Library:Create('UIListLayout', {
-                    Parent = Items['Tabs'];
-                    Padding = Dim(0, 1);
-                    VerticalAlignment = Enum.VerticalAlignment.Bottom;
-                    FillDirection = Enum.FillDirection.Horizontal;
-                    SortOrder = Enum.SortOrder.LayoutOrder
-                });
-
-                Library:Create('UIPadding', {
-                    Parent = Items['Tabs'];
-                    PaddingBottom = Dim(0, 1);
-                    PaddingRight = Dim(0, 1);
-                });
-                
-            end
-            -- Functions
-            function Cfg:Visible(Value)
-                if Value then
-                    Items['Window'].Visible = true;
-                else
-                    Items['Window'].Visible = false;
-                end
-            end
-
-            function Cfg:ChangeTitle(String)
-                Items['Title'].Text = String or Cfg.Name;
-            end
-            
-
-            --
-
-            -- Extras
-            Library:Draggify(Items['Window']);
-            Library:Resizify(
-                Items['Window'],
-                Vec2(510, 550),
-                Vec2(1000, 1000)
-            );
-
-            Cfg.Items = Items;
-            Cfg.Tabs = Items.Tabs;
-
-            return SetMetaTbl(Cfg, Library);
+            Library:Create('UIPadding', {
+                Parent = Items['Tabs'];
+                PaddingTop = Dim(0, 4);
+                PaddingBottom = Dim(0, 4);
+                PaddingLeft = Dim(0, 15);
+            });
+            -- >>> SIDEBAR LAYOUT END <<<
         end
+        
+        function Cfg:Visible(Value)
+            if Value then
+                Items['Window'].Visible = true;
+            else
+                Items['Window'].Visible = false;
+            end
+        end
+
+        function Cfg:ChangeTitle(String)
+            Items['Title'].Text = String or Cfg.Name;
+        end
+
+        Library:Draggify(Items['Window']);
+        Library:Resizify(
+            Items['Window'],
+            Vec2(510, 400),
+            Vec2(1000, 1000)
+        );
+
+        Cfg.Items = Items;
+        Cfg.Tabs = Items.Tabs;
+
+        return SetMetaTbl(Cfg, Library);
+    end
 
         function Library:Keypicker(Colorpicker)
             local Cfg = {
@@ -2473,6 +2566,7 @@
                     TextColor3 = Library.CurrentTheme.Text.Main;
                     BorderColor3 = Rgb(0, 0, 0);
                     Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
                     Parent = Items['Holder'];
                     Name = "\0";
                     AnchorPoint = Vec2(0, 0.5);
@@ -2480,10 +2574,20 @@
                     BackgroundTransparency = 1;
                     BorderSizePixel = 0;
                     LayoutOrder = 0;
-                    AutomaticSize = Enum.AutomaticSize.X;
                     TextSize = 12;
                     BackgroundColor3 = Rgb(255, 255, 255);
                 }); Library:Themeify(Items['Name'], 'TextColor3', {'Text', 'Main'});
+
+                Items['Logo'] = Library:Create('ImageLabel', {
+                    Parent = Items['Holder'];
+                    Name = "\0";
+                    BackgroundTransparency = 1;
+                    Size = UDim2.new(0, 12, 0, 12);
+                    Image = "rbxassetid://123244665811822";
+                    ImageColor3 = Library.CurrentTheme.Accent;
+                    LayoutOrder = -1;
+                });
+                Library:Themeify(Items['Logo'], 'ImageColor3', {'Accent'});
 
                 Items['Separator'] = Library:Create('TextLabel', {
                     FontFace = Library.Font;
@@ -2616,271 +2720,186 @@
         end
         
         function Library:Tab(params)
-            local Cfg = {
-                Name = (params.Name or params.name) or 'tab',
-                Items = { };
-            };
+        local Cfg = {
+            Name = (params.Name or params.name) or 'tab',
+            Items = { };
+        };
 
-            local Items = Cfg.Items; do
+        local Items = Cfg.Items; do
 
-                Items['Button'] = Library:Create( 'TextButton', {
-                    Parent = self['Tabs'];
-                    Name = "\0";
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(0, 0, 0, 18);
-                    BorderSizePixel = 0;
-                    AutoButtonColor = false;
-                    BackgroundColor3 = Rgb(255, 255, 255);
-                    BackgroundTransparency = 1;
-                    Text = '',
-                });
+            Items['Button'] = Library:Create( 'TextButton', {
+                Parent = self['Tabs'];
+                Name = "\0";
+                Size = Dim2(0, 100, 0, 20);
+                BorderSizePixel = 0;
+                AutoButtonColor = false;
+                BackgroundColor3 = Rgb(255, 255, 255);
+                BackgroundTransparency = 1;
+                Text = '',
+            });
 
-                Items['ButtonGradient'] = Library:Create( 'UIGradient', {
-                    Parent = Items['Button'];
-                    Color = Library.CurrentTheme.Gradients.Tab or ColorSeq({
-                        ColorKey(0, Rgb(46, 49, 54)),
-                        ColorKey(1, Rgb(32, 33, 37))
-                    });
-                    Rotation = -90;
-                }); Library:Themeify(Items['ButtonGradient'], 'Color', {'Gradients', 'Tab'});
-                
-                Items['Title']  = Library:Create( 'TextLabel', {
-                    Parent = Items['Button'];
-                    Name = "\0";
-                    Position = Dim2FromOffset(0, 0);
-                    Size = Dim2FromScale(1, 1);
-                    BorderSizePixel = 0;
-                    BackgroundTransparency = 1;
-                    TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(175, 175, 175);
-                    TextXAlignment = Enum.TextXAlignment.Center;
-                    TextYAlignment = Enum.TextYAlignment.Center;
-                    FontFace = Library.Font;
-                    TextSize = 12;
-                    Text = Cfg.Name;
-                }); Library:Themeify(Items['Title'], 'TextColor3', {'Text', 'Unselected'});
+            Items['Title']  = Library:Create( 'TextLabel', {
+                Parent = Items['Button'];
+                Name = "\0";
+                Position = Dim2FromOffset(4, 0);
+                Size = Dim2FromScale(1, 1);
+                BorderSizePixel = 0;
+                BackgroundTransparency = 1;
+                TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(175, 175, 175);
+                TextXAlignment = Enum.TextXAlignment.Left;
+                TextYAlignment = Enum.TextYAlignment.Center;
+                FontFace = Library.Font;
+                TextSize = 13;
+                Text = Cfg.Name;
+                AutomaticSize = Enum.AutomaticSize.X;
+            }); Library:Themeify(Items['Title'], 'TextColor3', {'Text', 'Unselected'});
             
-                Items.Button.Size = Dim2FromOffset(
-                    Items.Title.TextBounds.X + 6, 18)
+            -- Active indicator vertical line
+            Items['Line'] = Library:Create( 'Frame', {
+                Parent = Items['Button'];
+                Name = "\0";
+                Size = Dim2(0, 2, 1, -6);
+                Visible = false;
+                Position = Dim2(0, -8, 0, 3);
+                BorderColor3 = Rgb(0, 0, 0);
+                ZIndex = 4;
+                BorderSizePixel = 0;
+                BackgroundColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+            }); Library:Themeify(Items['Line'], 'BackgroundColor3', {'Accent'});
 
-                Library:Create( 'UIPadding', {
-                    Parent = Items['Button'];
-                    PaddingTop = Dim(0, 1);
-                })
+            Items['Page'] = Library:Create('ScrollingFrame', {
+                Parent = self.Items['Container'];
+                Name = "\0";
+                Visible = false;
+                BorderSizePixel = 0;
+                AutomaticCanvasSize = Enum.AutomaticSize.Y;
+                CanvasSize = Dim2();
+                ClipsDescendants = true;
+                ScrollBarThickness = 0;
+                ScrollingDirection = Enum.ScrollingDirection.Y;
+                Size = Dim2FromScale(1,1);
+                BackgroundTransparency = 1;
+                BottomImage = "";
+                MidImage = "";
+                TopImage = "";
+                BackgroundColor3 = Rgb(1,1,1);
+            });
 
-                Items['Outline'] = Library:Create('UIStroke', {
-                    Parent = Items['Button'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Borders.Outline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    Enabled = false;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                }); Library:Themeify(Items['Outline'], 'Color', {'Borders', 'Outline'});
-                
-                Items['Line'] = Library:Create( 'Frame', {
-                    Parent = Items['Button'];
-                    Name = "\0";
-                    Size = Dim2(1, -2, 0, 4);
-                    Visible = false;
-                    Position = Dim2(0, 1, 1, 0);
-                    BorderColor3 = Rgb(0, 0, 0);
-                    ZIndex = 4;
-                    BorderSizePixel = 0;
-                    BackgroundColor3 = Library.CurrentTheme.Gradients.Tab.Keypoints[1].Value;
-                }); Library:Themeify(Items['Line'], 'BackgroundColor3', {'Gradients', 'Tab', 'Keypoints', 1, 'Value'});
+            Items['Left'] = Library:Create( 'Frame', {
+                Parent = Items['Page'];
+                Name = "\0";
+                BackgroundTransparency = 1;
+                Size = Dim2(0.5, -4, 1, 0);
+                Position = Dim2(0, 0, 0, 0);
+                BorderColor3 = Rgb(0, 0, 0);
+                BorderSizePixel = 0;
+                AutomaticSize = Enum.AutomaticSize.Y;
+                BackgroundColor3 = Rgb(1, 1, 1);
+            });
 
-                Items['Page'] = Library:Create('ScrollingFrame', {
-                    Parent = self.Items['Container'];
-                    Name = "\0";
-                    Visible = false;
-                    BorderSizePixel = 0;
-                    AutomaticCanvasSize = Enum.AutomaticSize.Y;
-                    CanvasSize = Dim2();
-                    ClipsDescendants = true;
-                    ScrollBarThickness = 0;
-                    ScrollingDirection = Enum.ScrollingDirection.Y;
-                    Size = Dim2FromScale(1,1);
-                    BackgroundTransparency = 1;
-                    BottomImage = "";
-                    MidImage = "";
-                    TopImage = "";
-                    BackgroundColor3 = Rgb(1,1,1);
+            Items['Right'] = Library:Create( 'Frame', {
+                Parent = Items['Page'];
+                Name = "\0";
+                BackgroundTransparency = 1;
+                BorderColor3 = Rgb(0, 0, 0);
+                Size = Dim2(0.5, -4, 1, 0);
+                Position = Dim2(0.5, 4, 0, 0);
+                AutomaticSize = Enum.AutomaticSize.Y;
+                BorderSizePixel = 0;
+                BackgroundColor3 = Rgb(1, 1, 1);
+            });
+
+            for Index, Item in { Items['Left'], Items['Right'] } do
+                Library:Create( 'UIListLayout', {
+                    Parent = Item;
+                    Padding = Dim(0, 8);
+                    SortOrder = Enum.SortOrder.LayoutOrder;
+                    HorizontalFlex = Enum.UIFlexAlignment.Fill
                 });
 
-                Items['ContainerGradient'] = Library:Create('UIGradient', {
-                    Parent = Items['Page'];
-                    Color = Library.CurrentTheme.Gradients.Base or ColorSeq({
-                        ColorKey(0, Rgb(45, 48, 55)),
-                        ColorKey(1, Rgb(32, 33, 37))
-                    });
-                    Rotation = -90;
-                }); Library:Themeify(Items['ContainerGradient'], 'Color', {'Gradients', 'Base'});
-
-                Items['Left'] = Library:Create( 'Frame', {
-                    Parent = Items['Page'];
-                    Name = "\0";
-                    BackgroundTransparency = 1;
-                    Size = Dim2(0.5, -4, 1, 0);
-                    Position = Dim2(0, 0, 0, 0);
-                    BorderColor3 = Rgb(0, 0, 0);
-                    BorderSizePixel = 0;
-                    AutomaticSize = Enum.AutomaticSize.Y;
-                    BackgroundColor3 = Rgb(1, 1, 1);
-                });
-
-                Items['Right'] = Library:Create( 'Frame', {
-                    Parent = Items['Page'];
-                    Name = "\0";
-                    BackgroundTransparency = 1;
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(0.5, -4, 1, 0);
-                    Position = Dim2(0.5, 4, 0, 0);
-                    AutomaticSize = Enum.AutomaticSize.Y;
-                    BorderSizePixel = 0;
-                    BackgroundColor3 = Rgb(1, 1, 1);
-                });
-
-                for Index, Item in { Items['Left'], Items['Right'] } do
-
-                    Library:Create( 'UIListLayout', {
+                if Item == Items['Left'] then
+                    Library:Create('UIPadding', {
                         Parent = Item;
-                        Padding = Dim(0, 8);
-                        SortOrder = Enum.SortOrder.LayoutOrder;
-                        HorizontalFlex = Enum.UIFlexAlignment.Fill
-                    });
-
-                    if Item == Items['Left'] then
-                        Library:Create('UIPadding', {
-                            Parent = Item;
-                            PaddingTop = Dim(0, 8);
-                            PaddingLeft = Dim(0, 6);
-                        })
-                    else
-                        Library:Create('UIPadding', {
-                            Parent = Item;
-                            PaddingTop = Dim(0, 8);
-                            PaddingRight = Dim(0, 8);
-                        })
-                    end
-
-                end
-
-                Items['Inner'] = Library:Create( 'Frame', {
-                    Parent = Items['Button'];
-                    Name = "\0";
-                    BorderColor3 = Rgb(0, 0, 0);
-                    AnchorPoint = Vec2(0.5, 0);
-                    BackgroundTransparency = 1;
-                    Position = Dim2(0.5, 0, 0, 0);
-                    Size = Dim2(1, -2, 1, 2);
-                    BorderSizePixel = 0;
-                    BackgroundColor3 = Rgb(1, 1, 1);
-                }); 
-
-                Items['Inline'] = Library:Create( 'UIStroke', {
-                    Parent = Items['Inner'];
-                    Name = "\0";
-                    Enabled = false;
-                    Color = Library.CurrentTheme.Borders.Inline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                }); Library:Themeify(Items['Inline'], 'Color', {'Borders', 'Inline'});
-
-                Items['Accent'] = Library:Create( 'Frame', {
-                    Parent = Items['Inner'];
-                    Name = "\0";
-                    Visible = false;
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(1, 0, 0, 2);
-                    BorderSizePixel = 0;
-                    BackgroundColor3 = Library.CurrentTheme.Accent or Rgb(255, 255, 255);
-                }); Library:Themeify(Items['Accent'], 'BackgroundColor3', {'Accent'});
-                
-            end
-            --
-
-            -- Functions
-            local function UpdateCanvas()
-                local LeftSize = Items.Left.AbsoluteSize.Y
-                local RightSize = Items.Right.AbsoluteSize.Y
-
-                Items.Page.CanvasSize = Dim2(
-                    0,
-                    0,
-                    0,
-                    math.max(LeftSize, RightSize) + 8
-                )
-            end
-
-            Items.Left:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateCanvas)
-            Items.Right:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateCanvas)
-
-            task.defer(UpdateCanvas)
-
-            function Cfg.OpenTab()
-                local Current = self.TabMeta
-
-                local function Toggle(Tab, State)
-                    if not Tab or not Tab.Button then
-                        return
-                    end
-
-                    Tab.Button.Size = State and Dim2FromOffset(Tab.Title.TextBounds.X + 6, 18) or Dim2FromOffset(Tab.Title.TextBounds.X + 4, 18)
-                    Tab.Button.BackgroundTransparency = State and 0 or 1
-
-                    for _, v in { Tab.Line, Tab.Accent, Tab.Page } do
-                        v.Visible = State
-                    end
-
-                    for _, v in { Tab.Outline, Tab.Inline, Tab.ButtonGradient } do
-                        v.Enabled = State
-                    end
-
-                    Library:Tween(Tab.Title, {
-                        TextColor3 = State
-                            and Library.CurrentTheme.Accent
-                            or Library.CurrentTheme.Text.Unselected
+                        PaddingTop = Dim(0, 8);
+                        PaddingLeft = Dim(0, 6);
+                    })
+                else
+                    Library:Create('UIPadding', {
+                        Parent = Item;
+                        PaddingTop = Dim(0, 8);
+                        PaddingRight = Dim(0, 8);
                     })
                 end
-
-                Toggle(Current, false)
-
-                self.TabMeta = Items
-                Toggle(Items, true)
             end
-            
+        end
 
-            Library:Connect(Items.Button.MouseButton1Click, function()
-                Cfg.OpenTab();
-            end)
+        local function UpdateCanvas()
+            local LeftSize = Items.Left.AbsoluteSize.Y
+            local RightSize = Items.Right.AbsoluteSize.Y
 
-                Library:RegisterThemeCallback(function()
-                    local Selected = (self.TabMeta == Items)
+            Items.Page.CanvasSize = Dim2(
+                0,
+                0,
+                0,
+                math.max(LeftSize, RightSize) + 8
+            )
+        end
 
-                    Items.Title.TextColor3 = Selected
+        Items.Left:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateCanvas)
+        Items.Right:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateCanvas)
+
+        task.defer(UpdateCanvas)
+
+        function Cfg.OpenTab()
+            local Current = self.TabMeta
+
+            local function Toggle(Tab, State)
+                if not Tab or not Tab.Button then return end
+
+                for _, v in { Tab.Line, Tab.Page } do
+                    if v then v.Visible = State end
+                end
+
+                Library:Tween(Tab.Title, {
+                    TextColor3 = State
                         and (Library.CurrentTheme.Accent or Rgb(221, 168, 93))
                         or (Library.CurrentTheme.Text.Unselected or Rgb(175, 175, 175))
-                end)
-
-            Library:Connect(Items.Button.MouseEnter, function()
-                if self.TabMeta ~= Cfg.Items then
-                    Library:Tween(Items['Title'], { TextColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93) })
-                end
-            end)
-
-            Library:Connect(Items.Button.MouseLeave, function()
-                if self.TabMeta ~= Cfg.Items then
-                    Library:Tween(Items['Title'], { TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(175, 175, 175) })
-                end
-            end)
-
-            if not self.TabMeta then
-                Cfg.OpenTab()
+                })
             end
 
-            return SetMetaTbl(Cfg, Library);
+            if Current then Toggle(Current, false) end
+
+            self.TabMeta = Items
+            Toggle(Items, true)
         end
+        
+        Library:Connect(Items.Button.MouseButton1Click, function()
+            Cfg.OpenTab();
+        end)
+
+        Library:RegisterThemeCallback(function()
+            local Selected = (self.TabMeta == Items)
+            Items.Title.TextColor3 = Selected
+                and (Library.CurrentTheme.Accent or Rgb(221, 168, 93))
+                or (Library.CurrentTheme.Text.Unselected or Rgb(175, 175, 175))
+        end)
+
+        Library:Connect(Items.Button.MouseEnter, function()
+            if self.TabMeta ~= Cfg.Items then
+                Library:Tween(Items['Title'], { TextColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93) })
+            end
+        end)
+
+        Library:Connect(Items.Button.MouseLeave, function()
+            if self.TabMeta ~= Cfg.Items then
+                Library:Tween(Items['Title'], { TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(175, 175, 175) })
+            end
+        end)
+
+        if not self.TabMeta then Cfg.OpenTab() end
+
+        return SetMetaTbl(Cfg, Library);
+    end
 
         function Library:Section(params)
             local Cfg = {
