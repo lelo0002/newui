@@ -1,4 +1,4 @@
---2323233232323223
+--
 
 --
 
@@ -194,6 +194,33 @@
                 Cp.Open = false
                 if Cp.Keypicker and Cp.Keypicker.Items and Cp.Keypicker.Items['Picker'] then
                     Cp.Keypicker.Items['Picker'].Visible = false
+                end
+            end
+        end
+
+        Library.Dropdowns = {}
+        Library.ActiveDropdown = nil
+
+        function Library:CloseDropdowns()
+            if Library.ActiveDropdown then
+                if Library.ActiveDropdown.Hide then
+                    Library.ActiveDropdown:Hide(true)
+                end
+                Library.ActiveDropdown = nil
+            end
+            for _, Dd in ipairs(Library.Dropdowns or {}) do
+                if Dd.Open then
+                    if Dd.Hide then
+                        Dd:Hide(true)
+                    else
+                        Dd.Open = false
+                        if Dd.Items and Dd.Items['Container'] then
+                            Dd.Items['Container'].Visible = false
+                        end
+                        if Dd.Items and Dd.Items['Icon'] then
+                            Dd.Items['Icon'].Text = "+"
+                        end
+                    end
                 end
             end
         end
@@ -1675,6 +1702,9 @@
             if Library.CloseColorpickers then
                 Library:CloseColorpickers()
             end
+            if Library.CloseDropdowns then
+                Library:CloseDropdowns()
+            end
 
             for _, Connection in Library['Connections'] do
                 Connection:Disconnect();
@@ -1944,6 +1974,9 @@
             if not state then
                 if Library.CloseColorpickers then
                     Library:CloseColorpickers()
+                end
+                if Library.CloseDropdowns then
+                    Library:CloseDropdowns()
                 end
             end
             if Library.SetBlur then
@@ -2795,55 +2828,28 @@
 
             local Items = Cfg.Items; do
 
-                -- Sizing chain (innermost -> outermost): Holder -> Container -> Watermark -> WatermarkContainer.
-                -- Only offsets / AutomaticSize are used on X (no scale-on-autosize) to avoid runaway growth.
+                -- Root container in Library.Extras with background and borders
                 Items['WatermarkContainer'] = Library:Create('Frame', {
                     Parent = Library.Extras;
                     Name = "\0";
                     AnchorPoint = params.AnchorPoint or Vec2(0.5, 0);
                     Position = params.Position or Dim2(0.5, 0, 0, 14);
                     BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(0, 0, 0, 26);
+                    Size = Dim2(0, 0, 0, 20);
                     AutomaticSize = Enum.AutomaticSize.X;
                     BorderSizePixel = 0;
                     Active = true;
-                    BackgroundTransparency = 1;
-                    BackgroundColor3 = Rgb(255, 255, 255);
+                    BackgroundTransparency = 0;
+                    BackgroundColor3 = Library.CurrentTheme.Background or Rgb(20, 21, 24);
                     Visible = Cfg.Visible;
-                })
-                Library:Draggify(Items['WatermarkContainer'])
+                }); Library:Themeify(Items['WatermarkContainer'], 'BackgroundColor3', {'Background'});
 
-                Items['Watermark'] = Library:Create('Frame', {
-                    Parent = Items['WatermarkContainer'];
-                    Name = "\0";
-                    Position = Dim2(0, 0, 0, 0);
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(0, 0, 1, 0);
-                    AutomaticSize = Enum.AutomaticSize.X;
-                    BorderSizePixel = 0;
-                    Active = true;
-                    BackgroundColor3 = Rgb(255, 255, 255);
-                });
-
-                Library:Create('UIPadding', {
-                    Parent = Items['Watermark'];
-                    PaddingLeft = Dim(0, 3);
-                    PaddingRight = Dim(0, 3);
-                    PaddingTop = Dim(0, 3);
-                    PaddingBottom = Dim(0, 3);
-                });
-
-                Items['Gradient'] = Library:Create('UIGradient', {
-                    Rotation = 90;
-                    Parent = Items['Watermark'];
-                    Color = Library.CurrentTheme.Gradients.Base or ColorSeq({
-                        ColorKey(0, Rgb(45, 48, 55)),
-                        ColorKey(1, Rgb(32, 33, 37))
-                    });
-                }); Library:Themeify(Items['Gradient'], 'Color', {'Gradients', 'Base'});
+                -- For backward-compatibility with any scripts referencing Watermark or Container
+                Items['Watermark'] = Items['WatermarkContainer'];
+                Items['Container'] = Items['WatermarkContainer'];
 
                 Items['Outline'] = Library:Create('UIStroke', {
-                    Parent = Items['Watermark'];
+                    Parent = Items['WatermarkContainer'];
                     Name = "\0";
                     Color = Library.CurrentTheme.Borders.Outline or Rgb(0, 0, 0);
                     Thickness = 1;
@@ -2852,7 +2858,7 @@
                 }); Library:Themeify(Items['Outline'], 'Color', {'Borders', 'Outline'});
 
                 Items['Inline'] = Library:Create('UIStroke', {
-                    Parent = Items['Watermark'];
+                    Parent = Items['WatermarkContainer'];
                     Name = "\0";
                     Color = Library.CurrentTheme.Borders.Inline or Rgb(0, 0, 0);
                     Thickness = 1;
@@ -2861,56 +2867,34 @@
                     BorderStrokePosition = Enum.BorderStrokePosition.Inner;
                 }); Library:Themeify(Items['Inline'], 'Color', {'Borders', 'Inline'});
 
-                Items['Glow'] = Library:CreateGlow(Items['Watermark'], {
-                    Position = Dim2(0, -3, 0, -3);
-                    Size = Dim2(1, 6, 1, 6);
-                    ZIndex = 0;
-                })
-
-                Items['Container'] = Library:Create('Frame', {
-                    Parent = Items['Watermark'];
-                    Name = "\0";
-                    Position = Dim2(0, 0, 0, 0);
-                    BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(0, 0, 1, 0);
-                    BorderSizePixel = 0;
-                    AutomaticSize = Enum.AutomaticSize.X;
-                    BackgroundColor3 = Library.CurrentTheme.Background;
-                }); Library:Themeify(Items['Container'], 'BackgroundColor3', {'Background'});
-
-                Items['ContainerInline'] = Library:Create('UIStroke', {
-                    Parent = Items['Container'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Borders.Inline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                    BorderStrokePosition = Enum.BorderStrokePosition.Inner;
-                }); Library:Themeify(Items['ContainerInline'], 'Color', {'Borders', 'Inline'});
-
                 Items['Accent'] = Library:Create('Frame', {
-                    Parent = Items['Container'];
+                    Parent = Items['WatermarkContainer'];
                     Name = "\0";
                     Position = Dim2(0, 0, 0, 0);
                     BorderColor3 = Rgb(0, 0, 0);
-                    Size = Dim2(1, 0, 0, 2);
+                    Size = Dim2(0, 0, 0, 2);
                     BorderSizePixel = 0;
-                    ZIndex = 2;
-                    BackgroundColor3 = Library.CurrentTheme.Accent;
+                    ZIndex = 3;
+                    BackgroundColor3 = Library.CurrentTheme.Accent or Rgb(64, 185, 230);
                 }); Library:Themeify(Items['Accent'], 'BackgroundColor3', {'Accent'});
 
+                -- Synchronize accent line width exactly to the watermark width
+                Items['WatermarkContainer']:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
+                    Items['Accent'].Size = Dim2(0, Items['WatermarkContainer'].AbsoluteSize.X, 0, 2)
+                end)
+
                 Items['Holder'] = Library:Create('Frame', {
+                    Parent = Items['WatermarkContainer'];
                     BorderColor3 = Rgb(0, 0, 0);
                     AnchorPoint = Vec2(0, 0);
-                    Parent = Items['Container'];
                     BackgroundTransparency = 1;
-                    Position = Dim2(0, 0, 0, 1);
+                    Position = Dim2(0, 0, 0, 0);
                     Name = "\0";
-                    Active = true;
-                    Size = Dim2(0, 0, 1, -1);
+                    Active = false;
+                    Size = Dim2(0, 0, 1, 0);
                     AutomaticSize = Enum.AutomaticSize.X;
                     BorderSizePixel = 0;
-                    BackgroundColor3 = Rgb(255, 255, 255);
+                    ZIndex = 2;
                 });
 
                 Library:Create('UIListLayout', {
@@ -2919,7 +2903,7 @@
                     SortOrder = Enum.SortOrder.LayoutOrder;
                     FillDirection = Enum.FillDirection.Horizontal;
                     VerticalAlignment = Enum.VerticalAlignment.Center;
-                })
+                });
 
                 Library:Create('UIPadding', {
                     Parent = Items['Holder'];
@@ -2933,7 +2917,7 @@
                     BackgroundTransparency = 1;
                     Size = UDim2.new(0, 13, 0, 13);
                     Image = "rbxassetid://123244665811822";
-                    ImageColor3 = Library.CurrentTheme.Accent;
+                    ImageColor3 = Library.CurrentTheme.Accent or Rgb(64, 185, 230);
                     LayoutOrder = -1;
                 }); Library:Themeify(Items['Logo'], 'ImageColor3', {'Accent'});
 
@@ -2941,7 +2925,7 @@
                     FontFace = Library.Font;
                     TextColor3 = Library.CurrentTheme.Text.Main;
                     BorderColor3 = Rgb(0, 0, 0);
-                    Text = Cfg.Name;
+                    Text = "";
                     AutomaticSize = Enum.AutomaticSize.X;
                     Parent = Items['Holder'];
                     Name = "\0";
@@ -2953,7 +2937,22 @@
                     TextSize = 12;
                     RichText = true;
                     BackgroundColor3 = Rgb(255, 255, 255);
-                }); Library:Themeify(Items['Name'], 'TextColor3', {'Text', 'Main'});
+                });
+
+                local isFatalHit = (string.find(string.lower(tostring(Cfg.Name)), "fatal") ~= nil)
+
+                local function UpdateWatermarkName()
+                    if Items['Name'] and Items['Name'].Parent then
+                        if isFatalHit then
+                            local curHex = Library:FromHex(Library.CurrentTheme.Accent or Rgb(64, 185, 230))
+                            Items['Name'].Text = '<font color="#FFFFFF">fatal</font><font color="' .. curHex .. '">.hit</font>'
+                        else
+                            Items['Name'].Text = Cfg.Name
+                        end
+                    end
+                end
+                UpdateWatermarkName()
+                Library:RegisterThemeCallback(UpdateWatermarkName)
 
                 Items['Separator'] = Library:Create('TextLabel', {
                     FontFace = Library.Font;
@@ -2971,7 +2970,6 @@
                 Items['Labels'] = { }; 
                 Items['Separators'] = { }; 
                 do
-
                     for Index, Module in Cfg.Modules do
                         local Label = Library:Create('TextLabel', {
                             FontFace = Library.Font;
@@ -3006,12 +3004,41 @@
                                 TextColor3 = Library.CurrentTheme.Text.Unselected or Rgb(160, 163, 172);
                             }); Library:Themeify(Seperator, 'TextColor3', {'Text', 'Unselected'});
                             Insert(Items['Separators'], Seperator)
-
                         end
                     end
-
                 end
-                
+
+                -- Dedicated smooth draggable implementation for Watermark
+                local function SetupWatermarkDrag(frame)
+                    frame.InputBegan:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                            local dragStart = InputService:GetMouseLocation()
+                            local startPos = Items['WatermarkContainer'].Position
+                            local moveConn
+                            local endConn
+
+                            moveConn = InputService.InputChanged:Connect(function(moveInput)
+                                if moveInput.UserInputType == Enum.UserInputType.MouseMovement then
+                                    local delta = InputService:GetMouseLocation() - dragStart
+                                    Items['WatermarkContainer'].Position = Dim2(
+                                        startPos.X.Scale,
+                                        startPos.X.Offset + delta.X,
+                                        startPos.Y.Scale,
+                                        startPos.Y.Offset + delta.Y
+                                    )
+                                end
+                            end)
+
+                            endConn = InputService.InputEnded:Connect(function(endInput)
+                                if endInput.UserInputType == Enum.UserInputType.MouseButton1 then
+                                    if moveConn then moveConn:Disconnect() end
+                                    if endConn then endConn:Disconnect() end
+                                end
+                            end)
+                        end
+                    end)
+                end
+                SetupWatermarkDrag(Items['WatermarkContainer'])
             end
 
             local CurrentFps = 0
@@ -3244,6 +3271,9 @@
 
             if Library.CloseColorpickers then
                 Library:CloseColorpickers()
+            end
+            if Library.CloseDropdowns then
+                Library:CloseDropdowns()
             end
 
             local Current = self.TabMeta
@@ -4863,9 +4893,17 @@
                 end
                 
                 Library.Elements[Cfg.Flag] = Cfg
+                Library.Dropdowns = Library.Dropdowns or {}
+                Insert(Library.Dropdowns, Cfg)
 
                 function Cfg:Show()
+                    if Library.Visible == false then return end
+                    if Library.CloseDropdowns then
+                        Library:CloseDropdowns()
+                    end
+
                     Cfg.Open = true
+                    Library.ActiveDropdown = Cfg
 
                     Items['Container'].Visible = true
                     Items['Icon'].Text = "-"
@@ -4884,10 +4922,21 @@
                     ))
                 end
 
-                function Cfg:Hide()
+                function Cfg:Hide(immediate)
                     Cfg.Open = false
-
                     Items['Icon'].Text = "+"
+
+                    if immediate then
+                        Items['Container'].Visible = false
+                        Items['Container'].Size = Dim2FromOffset(
+                            Items['Holder'].AbsoluteSize.X,
+                            0
+                        )
+                        if Library.ActiveDropdown == Cfg then
+                            Library.ActiveDropdown = nil
+                        end
+                        return
+                    end
 
                     Library:Tween(Items['Container'], {
                         Size = Dim2FromOffset(
@@ -4905,6 +4954,10 @@
                             Items['Container'].Visible = false
                         end
                     end)
+
+                    if Library.ActiveDropdown == Cfg then
+                        Library.ActiveDropdown = nil
+                    end
                 end
 
                 Items['Holder']:GetPropertyChangedSignal('AbsolutePosition'):Connect(UpdateDropdown)
