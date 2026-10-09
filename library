@@ -1,4 +1,4 @@
--- 2323232
+-- 322332322
 local FetchService = setmetatable({}, {
 
         __index = function(_, service)
@@ -2670,6 +2670,17 @@ local FetchService = setmetatable({}, {
                 BackgroundColor3 = Rgb(255, 255, 255);
             });
 
+            Items['TopAccent'] = Library:Create('Frame', {
+                Parent = Items['Window'];
+                Name = "\0";
+                Position = Dim2(0, 0, 0, 0);
+                Size = Dim2(1, 0, 0, 1);
+                BorderSizePixel = 0;
+                BackgroundColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+                ZIndex = 5;
+            }); Library:Themeify(Items['TopAccent'], 'BackgroundColor3', {'Accent'});
+
+
             Items['Gradient'] = Library:Create('UIGradient', {
                 Parent = Items['Window'];
                 Name = "\0";
@@ -2716,11 +2727,22 @@ local FetchService = setmetatable({}, {
                 BackgroundTransparency = 1;
             });
         
+            
+            Items['Logo'] = Library:Create('ImageLabel', {
+                Parent = Items['Top'];
+                Name = "\0";
+                Position = Dim2(0, 15, 0, 10);
+                Size = Dim2(0, 30, 0, 30);
+                BackgroundTransparency = 1;
+                Image = "rbxassetid://123244665811822";
+                ImageColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
+            }); Library:Themeify(Items['Logo'], 'ImageColor3', {'Accent'});
+
             Items['Title'] = Library:Create( 'TextLabel', {
                 Parent = Items['Top'];
                 Name = "\0";
-                Position = Dim2(0, 15, 0, 15);
-                Size = Dim2(1, -30, 0, 20);
+                Position = Dim2(0, 50, 0, 15);
+                Size = Dim2(1, -65, 0, 20);
                 BackgroundTransparency = 1;
                 TextColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93);
                 TextXAlignment = Enum.TextXAlignment.Left;
@@ -6654,7 +6676,7 @@ function Library:Section(params)
 
                     LayoutOrder = 1;
 
-                    Position = Dim2(0, 0, 1, 0);
+                    Position = Dim2(0, 15, 1, 0);
 
                     Parent = Items['Slider'];
 
@@ -6662,7 +6684,7 @@ function Library:Section(params)
 
                     BackgroundColor3 = Rgb(255, 255, 255);
 
-                    Size = Dim2(1, 0, 0, 10);
+                    Size = Dim2(1, -30, 0, 8);
 
                     BorderSizePixel = 0;
 
@@ -6841,6 +6863,47 @@ function Library:Section(params)
                     });
 
                 }); Library:Themeify(Items['FillGradient'], 'Color', {'Gradients', 'ElementActive'});
+                
+                Items['Minus'] = Library:Create('TextButton', {
+                    Parent = Items['Slider'];
+                    Name = "\0";
+                    Size = Dim2(0, 15, 0, 10);
+                    Position = Dim2(0, 0, 1, 0);
+                    AnchorPoint = Vec2(0, 1);
+                    BackgroundTransparency = 1;
+                    Text = "-";
+                    TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224);
+                    FontFace = Library.Font;
+                    TextSize = 14;
+                    AutoButtonColor = false;
+                }); Library:Themeify(Items['Minus'], 'TextColor3', {'Text', 'Main'});
+
+                Items['Plus'] = Library:Create('TextButton', {
+                    Parent = Items['Slider'];
+                    Name = "\0";
+                    Size = Dim2(0, 15, 0, 10);
+                    Position = Dim2(1, 0, 1, 0);
+                    AnchorPoint = Vec2(1, 1);
+                    BackgroundTransparency = 1;
+                    Text = "+";
+                    TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224);
+                    FontFace = Library.Font;
+                    TextSize = 14;
+                    AutoButtonColor = false;
+                }); Library:Themeify(Items['Plus'], 'TextColor3', {'Text', 'Main'});
+
+                Library:Connect(Items['Minus'].MouseButton1Click, function()
+                    local step = (Cfg.Increment and Cfg.Increment > 0) and Cfg.Increment or 1
+                    local newVal = math.max(Cfg.Min, Cfg.Value - step)
+                    Cfg:Set(newVal)
+                end)
+
+                Library:Connect(Items['Plus'].MouseButton1Click, function()
+                    local step = (Cfg.Increment and Cfg.Increment > 0) and Cfg.Increment or 1
+                    local newVal = math.min(Cfg.Max, Cfg.Value + step)
+                    Cfg:Set(newVal)
+                end)
+
 
                 
 
