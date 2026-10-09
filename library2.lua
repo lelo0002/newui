@@ -1,4 +1,4 @@
--- 112424
+-- 1124245
 local FetchService = setmetatable({}, {
 
         __index = function(_, service)
@@ -4342,10 +4342,10 @@ function Library:Keypicker(Colorpicker)
 
                 }
 
-                Items[\'Holder\'].UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                    local ContentWidth = Items[\'Holder\'].UIListLayout.AbsoluteContentSize.X
-                    Items[\'Dock\'].Size = UDim2.new(0, ContentWidth + 14, 0, 40)
-                end))
+                Items['Holder'].UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                    local ContentWidth = Items['Holder'].UIListLayout.AbsoluteContentSize.X
+                    Items['Dock'].Size = UDim2.new(0, ContentWidth + 14, 0, 40)
+                end)
 
                 Items['Holder'].UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
                     local ContentWidth = Items['Holder'].UIListLayout.AbsoluteContentSize.X
