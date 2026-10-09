@@ -1,4 +1,4 @@
--- 322332322
+-- 112424
 local FetchService = setmetatable({}, {
 
         __index = function(_, service)
@@ -1877,17 +1877,13 @@ local FetchService = setmetatable({}, {
 
 
 
-                    Target.Position = Dim2(
-
+                    local TargetPos = Dim2(
                         StartPos.X.Scale,
-
                         StartPos.X.Offset + Delta.X,
-
                         StartPos.Y.Scale,
-
                         StartPos.Y.Offset + Delta.Y
-
                     )
+                    Library:Tween(Target, {Position = TargetPos}, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out))
 
                 end
 
