@@ -1,4 +1,4 @@
--- 11242424242442
+-- 1124242533252355235
 local FetchService = setmetatable({}, {
 
         __index = function(_, service)
@@ -1127,6 +1127,37 @@ local FetchService = setmetatable({}, {
 
         },
 
+    },
+
+    ['fatal'] = {
+        ['Accent'] = Rgb(180, 200, 255),
+        ['Borders'] = {
+            ['Outline'] = Rgb(5, 8, 12),
+            ['Inline']  = Rgb(58, 67, 82),
+        },
+        ['Background'] = Rgb(22, 25, 32),
+        ['Text'] = {
+            ['Main']       = Rgb(225, 230, 240),
+            ['Unselected'] = Rgb(145, 152, 165),
+        },
+        ['Gradients'] = {
+            ['Tab'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['Base'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['ElementBase'] = ColorSeq({
+                ColorKey(0, Rgb(52, 58, 72)),
+                ColorKey(1, Rgb(31, 35, 44)),
+            }),
+            ['ElementActive'] = ColorSeq({
+                ColorKey(0, Rgb(180, 200, 255)),
+                ColorKey(1, Rgb(150, 180, 240)),
+            }),
+        },
     },
 
     ['Catppuccin'] = {
@@ -4190,21 +4221,25 @@ function Library:Keypicker(Colorpicker)
 
                     Parent = Items['Holder'];
 
-
-
                     FillDirection = Enum.FillDirection.Horizontal;
 
                     HorizontalAlignment = Enum.HorizontalAlignment.Center;
 
                     VerticalAlignment = Enum.VerticalAlignment.Center;
 
-
-
                     Padding = Dim(0, 6);
 
                     SortOrder = Enum.SortOrder.LayoutOrder;
 
                 })
+
+                Items['Holder'].UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                    local ContentWidth = Items['Holder'].UIListLayout.AbsoluteContentSize.X
+                    -- Container padding/margin is 14px, and we need 14px outside as well.
+                    -- Holder is sized dynamically.
+                    Items['Dock'].Size = Dim2(0, ContentWidth + 14, 0, 40)
+                end)
+
 
                 
 
@@ -5003,6 +5038,12 @@ function Library:Keypicker(Colorpicker)
                         end
 
                     end
+
+                    local ContentWidth = Items['Holder'].UIListLayout.AbsoluteContentSize.X
+                    local padding = Items['Holder'].UIPadding.PaddingLeft.Offset + Items['Holder'].UIPadding.PaddingRight.Offset
+                    
+                    Items['Watermark'].Size = Dim2(0, ContentWidth + padding + 8, 0, 26)
+                    Items['WatermarkContainer'].Size = Dim2(0, ContentWidth + padding + 18, 0, 36)
 
                 end
 
