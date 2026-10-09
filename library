@@ -1,4 +1,4 @@
--- 112424
+-- 11242434
 local FetchService = setmetatable({}, {
 
         __index = function(_, service)
@@ -269,6 +269,26 @@ local FetchService = setmetatable({}, {
 
         };
 
+        Library.GlowElements = {}
+        Library.GlowAmount = 0
+
+        function Library:SetGlowAmount(amount)
+            Library.GlowAmount = amount
+            for _, data in ipairs(Library.GlowElements) do
+                local obj = data.Obj
+                local base = data.Base
+                if obj and obj.Parent then
+                    obj.ImageTransparency = math.clamp(1 - ((1 - base) * amount), 0, 1)
+                end
+            end
+        end
+
+        function Library:AddGlow(obj, baseTransparency)
+            table.insert(Library.GlowElements, { Obj = obj, Base = baseTransparency })
+            obj.ImageTransparency = math.clamp(1 - ((1 - baseTransparency) * Library.GlowAmount), 0, 1)
+        end
+
+
 
 
         local Fonts = { }; do
@@ -320,6 +340,67 @@ local FetchService = setmetatable({}, {
         end
         
     local Themes = {
+        ['fatal'] = {
+        ['Accent'] = Rgb(180, 200, 255),
+        ['Borders'] = {
+            ['Outline'] = Rgb(5, 8, 12),
+            ['Inline']  = Rgb(58, 67, 82),
+        },
+        ['Background'] = Rgb(22, 25, 32),
+        ['Text'] = {
+            ['Main']       = Rgb(225, 230, 240),
+            ['Unselected'] = Rgb(145, 152, 165),
+        },
+        ['Gradients'] = {
+            ['Tab'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['Base'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['ElementBase'] = ColorSeq({
+                ColorKey(0, Rgb(52, 58, 72)),
+                ColorKey(1, Rgb(31, 35, 44)),
+            }),
+            ['ElementActive'] = ColorSeq({
+                ColorKey(0, Rgb(180, 200, 255)),
+                ColorKey(1, Rgb(150, 180, 240)),
+            }),
+        },
+    },
+
+['fatal'] = {
+        ['Accent'] = Rgb(180, 200, 255),
+        ['Borders'] = {
+            ['Outline'] = Rgb(5, 8, 12),
+            ['Inline']  = Rgb(58, 67, 82),
+        },
+        ['Background'] = Rgb(22, 25, 32),
+        ['Text'] = {
+            ['Main']       = Rgb(225, 230, 240),
+            ['Unselected'] = Rgb(145, 152, 165),
+        },
+        ['Gradients'] = {
+            ['Tab'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['Base'] = ColorSeq({
+                ColorKey(0, Rgb(40, 45, 56)),
+                ColorKey(1, Rgb(24, 27, 35)),
+            }),
+            ['ElementBase'] = ColorSeq({
+                ColorKey(0, Rgb(52, 58, 72)),
+                ColorKey(1, Rgb(31, 35, 44)),
+            }),
+            ['ElementActive'] = ColorSeq({
+                ColorKey(0, Rgb(180, 200, 255)),
+                ColorKey(1, Rgb(150, 180, 240)),
+            }),
+        },
+    },
 
     ['fatal'] = {
         ['Accent'] = Rgb(180, 200, 255),
@@ -2732,6 +2813,34 @@ local FetchService = setmetatable({}, {
                 BackgroundTransparency = 0;
                 BackgroundColor3 = Rgb(255, 255, 255);
             });
+            Items['Glow1'] = Library:Create("ImageLabel", {
+                Name = "\0",
+                BackgroundTransparency = 1,
+                Image = "rbxassetid://1316045217",
+                ImageColor3 = Library.CurrentTheme.Accent,
+                ImageTransparency = 0.65,
+                Position = UDim2.new(0, -25, 0, -25),
+                Size = UDim2.new(1, 50, 1, 50),
+                ZIndex = 0,
+                Parent = Items['Window'],
+            })
+            Library:Themeify(Items['Glow1'], 'ImageColor3', {'Accent'})
+            Library:AddGlow(Items['Glow1'], 0.65)
+
+            Items['Glow2'] = Library:Create("ImageLabel", {
+                Name = "\0",
+                BackgroundTransparency = 1,
+                Image = "rbxassetid://1316045217",
+                ImageColor3 = Library.CurrentTheme.Accent,
+                ImageTransparency = 0.85,
+                Position = UDim2.new(0, -50, 0, -50),
+                Size = UDim2.new(1, 100, 1, 100),
+                ZIndex = -1,
+                Parent = Items['Window'],
+            })
+            Library:Themeify(Items['Glow2'], 'ImageColor3', {'Accent'})
+            Library:AddGlow(Items['Glow2'], 0.85)
+
 
             Items['TopAccent'] = Library:Create('Frame', {
                 Parent = Items['Window'];
@@ -4231,7 +4340,12 @@ function Library:Keypicker(Colorpicker)
 
                     SortOrder = Enum.SortOrder.LayoutOrder;
 
-                })
+                }
+
+                Items[\'Holder\'].UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                    local ContentWidth = Items[\'Holder\'].UIListLayout.AbsoluteContentSize.X
+                    Items[\'Dock\'].Size = UDim2.new(0, ContentWidth + 14, 0, 40)
+                end))
 
                 Items['Holder'].UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
                     local ContentWidth = Items['Holder'].UIListLayout.AbsoluteContentSize.X
@@ -4768,6 +4882,7 @@ function Library:Keypicker(Colorpicker)
                     BorderColor3 = Rgb(0, 0, 0);
 
                     Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
 
                     Parent = Items['Holder'];
 
@@ -4790,6 +4905,16 @@ function Library:Keypicker(Colorpicker)
                     BackgroundColor3 = Rgb(255, 255, 255);
 
                 }); Library:Themeify(Items['Name'], 'TextColor3', {'Text', 'Main'});
+                Items['Logo'] = Library:Create('ImageLabel', {
+                    Parent = Items['Holder'];
+                    Name = "\0";
+                    BackgroundTransparency = 1;
+                    Size = UDim2.new(0, 12, 0, 12);
+                    Image = "rbxassetid://123244665811822";
+                    ImageColor3 = Library.CurrentTheme.Accent;
+                    LayoutOrder = -1;
+                });
+                Library:Themeify(Items['Logo'], 'ImageColor3', {'Accent'});
 
 
 
@@ -5021,32 +5146,19 @@ function Library:Keypicker(Colorpicker)
 
             
 
-            local WatermarkThread = task.spawn(function()
-
+                        local WatermarkThread = task.spawn(function()
                 while task.wait(0.1) do
-
                     for Index, Module in Cfg.Modules do
-
                         local Label = Items['Labels'][Index]
-
-
-
                         if Label then
-
                             Label.Text = Cfg:Resolve(Module) or ""
-
                         end
-
                     end
-
                     local ContentWidth = Items['Holder'].UIListLayout.AbsoluteContentSize.X
                     local padding = Items['Holder'].UIPadding.PaddingLeft.Offset + Items['Holder'].UIPadding.PaddingRight.Offset
-                    
-                    Items['Watermark'].Size = Dim2(0, ContentWidth + padding + 8, 0, 26)
-                    Items['WatermarkContainer'].Size = Dim2(0, ContentWidth + padding + 18, 0, 36)
-
+                    Items['Watermark'].Size = UDim2.new(0, ContentWidth + padding + 8, 0, 26)
+                    Items['WatermarkContainer'].Size = UDim2.new(0, ContentWidth + padding + 18, 0, 36)
                 end
-
             end)
 
             Insert(Library.Threads, WatermarkThread)
@@ -5091,6 +5203,7 @@ function Library:Keypicker(Colorpicker)
                 FontFace = Library.Font;
                 TextSize = 13;
                 Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
             }); Library:Themeify(Items['Title'], 'TextColor3', {'Text', 'Unselected'});
             
             -- Active indicator vertical line
@@ -5362,6 +5475,7 @@ function Library:Section(params)
                     BorderColor3 = Rgb(0, 0, 0);
 
                     Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
 
                     Name = "\0";
 
@@ -6416,6 +6530,7 @@ function Library:Section(params)
                     FontFace = Library.Font;
 
                     Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
 
                     TextSize = 12;
 
@@ -6832,6 +6947,7 @@ function Library:Section(params)
                     BorderColor3 = Rgb(0, 0, 0);
 
                     Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
 
                     Parent = Items['Slider'];
 
@@ -7691,6 +7807,7 @@ function Library:Section(params)
                     BorderColor3 = Rgb(0, 0, 0);
 
                     Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
 
                     Parent = Items['Dropdown'];
 
@@ -8685,6 +8802,7 @@ function Library:Section(params)
                         AnchorPoint = Vec2(0, 0);
 
                         Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
 
                         TextSize = 12;
 
@@ -9261,6 +9379,7 @@ function Library:Section(params)
                         AnchorPoint = Vec2(0, 0);
 
                         Text = Cfg.Name;
+                    AutomaticSize = Enum.AutomaticSize.X;
 
                         TextSize = 12;
 
