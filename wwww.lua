@@ -1,5 +1,5 @@
 --
---2
+-----
 --
 
     local FetchService = setmetatable({}, {
@@ -223,6 +223,8 @@
                     end
                 end
             end
+        end
+
         Library.ActiveKeybindMenu = nil
 
         function Library:CloseKeybindMenus()
