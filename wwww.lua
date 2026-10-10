@@ -1,5 +1,5 @@
 --
-
+--2
 --
 
     local FetchService = setmetatable({}, {
@@ -221,6 +221,20 @@
                             Dd.Items['Icon'].Text = "+"
                         end
                     end
+                end
+            end
+        Library.ActiveKeybindMenu = nil
+
+        function Library:CloseKeybindMenus()
+            if Library.ActiveKeybindMenu then
+                if Library.ActiveKeybindMenu.HideModeMenu then
+                    Library.ActiveKeybindMenu:HideModeMenu()
+                end
+                Library.ActiveKeybindMenu = nil
+            end
+            for _, elem in pairs(Library.Elements or {}) do
+                if elem.HideModeMenu and elem.Items and elem.Items.ModeMenu and elem.Items.ModeMenu.Visible then
+                    elem:HideModeMenu()
                 end
             end
         end
@@ -1705,6 +1719,9 @@
             if Library.CloseDropdowns then
                 Library:CloseDropdowns()
             end
+            if Library.CloseKeybindMenus then
+                Library:CloseKeybindMenus()
+            end
 
             for _, Connection in Library['Connections'] do
                 Connection:Disconnect();
@@ -1719,11 +1736,13 @@
             end
 
             if Library['Holder'] then
-                Library['Holder']:Destroy();
+                pcall(function() Library['Holder']:Destroy() end)
+                Library['Holder'] = nil;
             end
 
             if Library['Extras'] then
-                Library['Extras']:Destroy();
+                pcall(function() Library['Extras']:Destroy() end)
+                Library['Extras'] = nil;
             end
 
             if Library['BlurEffect'] then
@@ -1731,7 +1750,28 @@
                 Library['BlurEffect'] = nil;
             end
 
+            -- Panic Button Feature: Execute user-registered Unload callback to kill feature logic
+            if Library.OnUnloadCallback then
+                SafeCall(Library.OnUnloadCallback)
+            elseif Library.OnUnload and typeof(Library.OnUnload) == "function" then
+                SafeCall(Library.OnUnload)
+            end
+
+            -- Clear environment globals to allow clean re-execution
+            if getgenv then
+                getgenv().Library = nil
+                getgenv().Themes = nil
+                getgenv().Dim2 = nil
+                getgenv().Rgb = nil
+                getgenv().Insert = nil
+                getgenv().Sort = nil
+            end
+
             Library = nil;
+        end
+
+        function Library:OnUnload(Callback)
+            Library.OnUnloadCallback = Callback
         end
 
         --
@@ -1749,21 +1789,42 @@
             Items = { };
         };
 
-        Library.Holder = Library.Holder or Library:Create("ScreenGui", {
-            Name = '\0',
-            ResetOnSpawn = false,
-            IgnoreGuiInset = true,
-            ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-            Parent = LocalPlayer.PlayerGui or CoreGui;
-        });
+        local function GetGuiParent()
+            if typeof(gethui) == "function" then
+                local success, hui = pcall(gethui)
+                if success and hui then return hui end
+            end
+            local coreGui = game:GetService("CoreGui")
+            local success, _ = pcall(function() return coreGui.Name end)
+            if success and coreGui then
+                return coreGui
+            end
+            return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer.PlayerGui
+        end
 
-        Library.Extras = Library.Extras or Library:Create('ScreenGui', {
-            Name = '\0',
-            ResetOnSpawn = false,
-            IgnoreGuiInset = true,
-            ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-            Parent = LocalPlayer.PlayerGui or CoreGui;
-        });
+        if not Library.Holder or not Library.Holder.Parent then
+            Library.Holder = Library:Create("ScreenGui", {
+                Name = '\0',
+                ResetOnSpawn = false,
+                IgnoreGuiInset = true,
+                ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+                Parent = GetGuiParent();
+            });
+        else
+            Library.Holder:ClearAllChildren();
+        end
+
+        if not Library.Extras or not Library.Extras.Parent then
+            Library.Extras = Library:Create('ScreenGui', {
+                Name = '\0',
+                ResetOnSpawn = false,
+                IgnoreGuiInset = true,
+                ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+                Parent = GetGuiParent();
+            });
+        else
+            Library.Extras:ClearAllChildren();
+        end
 
         local Items = Cfg.Items; do
 
@@ -1977,6 +2038,9 @@
                 end
                 if Library.CloseDropdowns then
                     Library:CloseDropdowns()
+                end
+                if Library.CloseKeybindMenus then
+                    Library:CloseKeybindMenus()
                 end
             end
             if Library.SetBlur then
@@ -3275,6 +3339,9 @@
             if Library.CloseDropdowns then
                 Library:CloseDropdowns()
             end
+            if Library.CloseKeybindMenus then
+                Library:CloseKeybindMenus()
+            end
 
             local Current = self.TabMeta
 
@@ -3839,6 +3906,144 @@
 
             return unpack(Cfg.Sections)
         end
+
+        function Library:Divider(params)
+            params = params or {}
+            local ParentContainer = (self.Items and (self.Items.Container or self.Items.Content)) or self
+            local Line = Library:Create('Frame', {
+                Name = 'Divider',
+                Size = Dim2(1, 0, 0, 1),
+                BackgroundColor3 = Library.CurrentTheme.Borders.Inline or Rgb(45, 48, 55),
+                BorderSizePixel = 0,
+                Parent = ParentContainer
+            })
+            Library:Themeify(Line, 'BackgroundColor3', {'Borders', 'Inline'})
+            return Line
+        end
+        Library.AddDivider = Library.Divider
+
+        function Library:DependencyBox(params)
+            params = params or {}
+            local Cfg = {
+                Dependencies = {},
+                Items = {}
+            }
+
+            local ParentContainer = (self.Items and (self.Items.Container or self.Items.Content)) or self
+            if not ParentContainer then
+                ParentContainer = Library.Holder
+            end
+
+            local Holder = Library:Create('Frame', {
+                Name = "\0",
+                BackgroundTransparency = 1,
+                Size = Dim2(1, 0, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                Visible = false,
+                Parent = ParentContainer
+            })
+
+            local VerticalLine = Library:Create('Frame', {
+                Name = "VerticalLine",
+                BackgroundColor3 = Library.CurrentTheme.Accent or Rgb(64, 185, 230),
+                BorderSizePixel = 0,
+                AnchorPoint = Vec2(0.5, 0),
+                Position = Dim2(0, 5, 0, 0),
+                Size = Dim2(0, 1, 1, 0),
+                Visible = true,
+                ZIndex = 5,
+                Parent = Holder
+            })
+            Library:Themeify(VerticalLine, 'BackgroundColor3', {'Accent'})
+
+            local LineGradient = Library:Create('UIGradient', {
+                Name = "AccentGradient",
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0.4),
+                    NumberSequenceKeypoint.new(0.15, 0),
+                    NumberSequenceKeypoint.new(0.85, 0),
+                    NumberSequenceKeypoint.new(1, 0.4)
+                }),
+                Rotation = 90,
+                Parent = VerticalLine
+            })
+
+            local Content = Library:Create('Frame', {
+                Name = "\0",
+                BackgroundTransparency = 1,
+                Size = Dim2(1, -14, 0, 0),
+                Position = Dim2(0, 14, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                Visible = true,
+                Parent = Holder
+            })
+
+            Library:Create('UIListLayout', {
+                Parent = Content,
+                Padding = Dim(0, 7),
+                SortOrder = Enum.SortOrder.LayoutOrder
+            })
+
+            Cfg.Items.Container = Content
+            Cfg.Items.Holder = Holder
+            Cfg.Items.VerticalLine = VerticalLine
+            Cfg.Items.LineGradient = LineGradient
+
+            function Cfg:SetupDependencies(Dependencies)
+                Cfg.Dependencies = Dependencies or {}
+                local function Update()
+                    local allMatch = true
+                    for _, dep in ipairs(Cfg.Dependencies) do
+                        local elem = dep[1]
+                        local expected = dep[2]
+                        local current = nil
+                        if type(elem) == 'table' then
+                            if elem.Enabled ~= nil then
+                                current = elem.Enabled
+                            elseif elem.Value ~= nil then
+                                current = elem.Value
+                            elseif elem.Selected ~= nil then
+                                current = elem.Selected
+                            end
+                        end
+                        if current ~= expected then
+                            allMatch = false
+                            break
+                        end
+                    end
+                    Holder.Visible = allMatch
+                end
+
+                for _, dep in ipairs(Cfg.Dependencies) do
+                    local elem = dep[1]
+                    if type(elem) == 'table' then
+                        if not elem._DepListeners then
+                            elem._DepListeners = {}
+                            local origCb = elem.Callback or function() end
+                            elem.Callback = function(...)
+                                local res = origCb(...)
+                                for _, fn in ipairs(elem._DepListeners) do
+                                    pcall(fn)
+                                end
+                                return res
+                            end
+                        end
+                        table.insert(elem._DepListeners, Update)
+                    end
+                end
+
+                Update()
+            end
+
+            return SetMetaTbl(Cfg, Library)
+        end
+        Library.AddDependencyBox = Library.DependencyBox
+        Library.AddToggle = Library.Toggle
+        Library.AddDropdown = Library.Dropdown
+        Library.AddSlider = Library.Slider
+        Library.AddColorPicker = Library.Colorpicker
+        Library.AddLabel = Library.Label
+        Library.AddTextbox = Library.Textbox
 
         function Library:Toggle(params)
             local Cfg = {
@@ -4545,7 +4750,7 @@
                 Name = (params.Name or params.name) or 'dropdown',
                 Flag = (params.Flag or params.flag) or Library:MakeFlag(self, 'dropdown'),
                 Callback = (params.Callback or params.callback) or function() end,
-                Options = params.Options or params.options or { "Option1", "Option2", "Option3" },
+                Options = params.Options or params.options or params.Values or params.values or params.List or params.list or { "Option1", "Option2", "Option3" },
                 MultiSelect = (params.MultiSelect ~= nil or params.multiselect ~= nil) and (params.MultiSelect or params.multiselect) or false,
                 Default = params.Default or params.default or nil;
 
@@ -4712,8 +4917,8 @@
                     AnchorPoint = Vec2(0, 0);
                     AutomaticCanvasSize = Enum.AutomaticSize.Y;
 
-                    ScrollBarThickness = 0;
-                    ScrollBarImageTransparency = 1;
+                    ScrollBarThickness = 2;
+                    ScrollBarImageTransparency = 0;
 
                     ClipsDescendants = true;
 
@@ -4784,7 +4989,19 @@
                 local MAX_HEIGHT = 140
 
                 local function GetContentHeight()
-                    return Layout.AbsoluteContentSize.Y + 8
+                    local count = 0
+                    if Cfg.Options then
+                        count = #Cfg.Options
+                    else
+                        for _ in pairs(Cfg.OptionInstances) do
+                            count = count + 1
+                        end
+                    end
+                    local expected = count * 14 + 8
+                    if Layout and Layout.AbsoluteContentSize.Y > 0 then
+                        return math.max(Layout.AbsoluteContentSize.Y + 8, expected)
+                    end
+                    return expected
                 end
 
                 local function UpdateDropdown()
@@ -5020,6 +5237,16 @@
                     end
                 end)
 
+                if Items['Icon'] then
+                    Library:Connect(Items['Icon'].MouseButton1Click, function()
+                        if Cfg.Open then
+                            Cfg:Hide()
+                        else
+                            Cfg:Show()
+                        end
+                    end)
+                end
+
                 if Cfg.Default then
                     Cfg:Set(Cfg.Default)
                 end
@@ -5102,177 +5329,479 @@
             return SetMetaTbl(Cfg, Library)
         end
 
-        function Library:Keybind(params)
+        function Library:Keybind(arg1, arg2)
+            local params
+            if type(arg1) == "string" then
+                params = (type(arg2) == "table") and arg2 or {}
+                params.Flag = params.Flag or arg1
+                params.Name = params.Name or params.Text or arg1
+            elseif type(arg1) == "table" then
+                params = arg1
+            else
+                params = {}
+            end
+
+            local initialKey = params.Key or params.key or params.Default or params.default or Enum.KeyCode.Unknown
+            local initialMode = params.Mode or params.mode or "Hold"
+            if typeof(initialMode) == "string" then
+                initialMode = initialMode:sub(1,1):upper() .. initialMode:sub(2):lower()
+                if initialMode ~= "Always" and initialMode ~= "Toggle" and initialMode ~= "Hold" then
+                    initialMode = "Hold"
+                end
+            else
+                initialMode = "Hold"
+            end
+
             local Cfg = {
-                Name = (params.Name or params.name) or 'keybind',
+                Name = (params.Name or params.name or params.Text) or 'keybind',
                 Flag = (params.Flag or params.flag) or Library:MakeFlag(self, 'keybind'),
                 Callback = (params.Callback or params.callback) or function() end,
-                Key = (params.Key or params.key) or Enum.KeyCode.Unknown,
-                Mode = (params.Mode or params.mode) or "Hold",
+                Key = initialKey,
+                Mode = initialMode,
+                SyncToggleState = (params.SyncToggleState ~= nil) and params.SyncToggleState or true,
+                NoUI = (params.NoUI == true),
 
-                -->
-                BindedToToggle = false;
-                ToggleObject = nil;
-                -->
+                BindedToToggle = false,
+                ToggleObject = nil,
 
-                Listening = false;
-                Active = false;
+                Listening = false,
+                Active = false,
 
-                Items = { };
-            };
-            
-            if self.Items and self.Items.Content then
-                Cfg.BindedToToggle = true
-                Cfg.ToggleObject = selfs
-                self.KeybindObject = Cfg
+                Items = {},
+            }
+
+            local ParentObj = self
+            if self.ToggleObject then
+                ParentObj = self.ToggleObject
+            end
+
+            if ParentObj.Items and (ParentObj.Items.Content or ParentObj.Items.Container) then
+                if ParentObj.Items.Content then
+                    Cfg.BindedToToggle = true
+                    Cfg.ToggleObject = ParentObj
+                    ParentObj.KeybindObject = Cfg
+                end
             end
 
             local Parent = Cfg.BindedToToggle
-                and self.Items.Content
-                or self.Items.Container
+                and ParentObj.Items.Content
+                or ParentObj.Items.Container
 
-            local Items = Cfg.Items; do
-
+            local Items = Cfg.Items
+            do
                 Items['Holder'] = Library:Create('Frame', {
-                    Parent = Parent;
-                    Name = "\0";
-                    BorderSizePixel = 0;
-                    BackgroundColor3 = Rgb(255,255,255);
-                    Size = Dim2FromOffset(0, 12);
-                    AnchorPoint = Vec2(1, 0);
-                    Position = Dim2(1, 0, 0, 0);
-                    AutomaticSize = Enum.AutomaticSize.X;
-                });
+                    Parent = Parent,
+                    Name = "\0",
+                    BorderSizePixel = 0,
+                    BackgroundColor3 = Rgb(255, 255, 255),
+                    Size = Dim2FromOffset(0, 12),
+                    AnchorPoint = Vec2(1, 0.5),
+                    Position = Dim2(1, 0, 0.5, 0),
+                    AutomaticSize = Enum.AutomaticSize.X,
+                })
+
+                if Cfg.BindedToToggle then
+                    ParentObj.Addons = ParentObj.Addons or {}
+                    table.insert(ParentObj.Addons, Cfg)
+                    if not ParentObj.UpdateAddonsPositions then
+                        local function UpdateAddonsPositions()
+                            local offset = 0
+                            for i = #ParentObj.Addons, 1, -1 do
+                                local addon = ParentObj.Addons[i]
+                                if addon.Items and addon.Items['Bind'] then
+                                    addon.Items['Bind'].AnchorPoint = Vec2(1, 0.5)
+                                    addon.Items['Bind'].Position = Dim2(1, -offset, 0.5, 0)
+                                    offset = offset + 26
+                                elseif addon.Items and addon.Items['Holder'] then
+                                    local w = (addon.Items['Holder'].AbsoluteSize.X > 0) and addon.Items['Holder'].AbsoluteSize.X or 30
+                                    addon.Items['Holder'].AnchorPoint = Vec2(1, 0.5)
+                                    addon.Items['Holder'].Position = Dim2(1, -offset, 0.5, 0)
+                                    offset = offset + w + 4
+                                end
+                            end
+                        end
+                        ParentObj.UpdateAddonsPositions = UpdateAddonsPositions
+                    end
+                    if ParentObj.UpdateAddonsPositions then
+                        ParentObj.UpdateAddonsPositions()
+                    end
+                    Items['Holder']:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
+                        if ParentObj.UpdateAddonsPositions then
+                            ParentObj.UpdateAddonsPositions()
+                        end
+                    end)
+                end
 
                 if not Cfg.BindedToToggle then
-
                     Items['Container'] = Library:Create('Frame', {
-                        Parent = self.Items['Container'];
-                        Name = "\0";
-                        BorderSizePixel = 0;
-                        BackgroundColor3 = Rgb(255,255,255);
-                        Size = Dim2(1, 0, 0, 13);
-                        BackgroundTransparency = 1;
-                        Position = Dim2(0, 0, 0, 0);
-                    });
+                        Parent = self.Items['Container'],
+                        Name = "\0",
+                        BorderSizePixel = 0,
+                        BackgroundColor3 = Rgb(255, 255, 255),
+                        Size = Dim2(1, 0, 0, 13),
+                        BackgroundTransparency = 1,
+                        Position = Dim2(0, 0, 0, 0),
+                    })
 
-                    Items['Holder'].Parent = Items['Container'];
-                    
+                    Items['Holder'].Parent = Items['Container']
+
                     Items['Text'] = Library:Create('TextLabel', {
-                        Parent = Items['Container'];
-                        BackgroundTransparency = 1;
-                        Size = Dim2(0, 0, 0, 12);
-                        FontFace = Library.Font;
-                        Position = Dim2(0, -1, 0, 0);
-                        AnchorPoint = Vec2(0, 0);
-                        Text = Cfg.Name;
-                        TextSize = 12;
-                        TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224);
-                        BackgroundColor3 = Rgb(255, 255, 255);
-                        TextXAlignment = Enum.TextXAlignment.Left;
-                        Visible = not Cfg.BindedToToggle;
-                    }); Library:Themeify(Items['Text'], 'TextColor3', {'Text', 'Main'});
-                    
+                        Parent = Items['Container'],
+                        BackgroundTransparency = 1,
+                        Size = Dim2(0, 0, 0, 12),
+                        FontFace = Library.Font,
+                        Position = Dim2(0, -1, 0, 0),
+                        AnchorPoint = Vec2(0, 0),
+                        Text = Cfg.Name,
+                        TextSize = 12,
+                        TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224),
+                        BackgroundColor3 = Rgb(255, 255, 255),
+                        TextXAlignment = Enum.TextXAlignment.Left,
+                        Visible = not Cfg.BindedToToggle,
+                    })
+                    Library:Themeify(Items['Text'], 'TextColor3', {'Text', 'Main'})
+
                     Items['Hover'] = Library:Create('TextButton', {
-                        Parent = Items['Text'];
-                        Name = "\0";
-                        BorderSizePixel = 0;
-                        BackgroundTransparency = 1;
-                        AutoButtonColor = false;
-                        Text = "";
-                        Size = Dim2(0, Items['Text'].TextBounds.X, 1, 0); -- match text width
-                        Position = Dim2(0,0,0,0);
-                    });
-                    --
-
-                    -- Extras
-
+                        Parent = Items['Text'],
+                        Name = "\0",
+                        BorderSizePixel = 0,
+                        BackgroundTransparency = 1,
+                        AutoButtonColor = false,
+                        Text = "",
+                        Size = Dim2(0, Items['Text'].TextBounds.X, 1, 0),
+                        Position = Dim2(0, 0, 0, 0),
+                    })
 
                     Items['Hover'].MouseEnter:Connect(function()
                         Library:Tween(Items['Text'], {
                             TextColor3 = Library.CurrentTheme.Accent or Rgb(221, 168, 93)
-                        });
+                        })
                     end)
 
                     Items['Hover'].MouseLeave:Connect(function()
                         Library:Tween(Items['Text'], {
                             TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224)
-                        });
+                        })
                     end)
-
                 end
 
                 Items['Padding'] = Library:Create('UIPadding', {
                     Parent = Items['Holder'],
                     PaddingLeft = Dim(0, 5),
-                    PaddingRight = Dim(0, 4)
+                    PaddingRight = Dim(0, 4),
                 })
 
                 Items['Gradient'] = Library:Create('UIGradient', {
-                    Parent = Items['Holder'];
+                    Parent = Items['Holder'],
                     Color = Library.CurrentTheme.Gradients.Base or ColorSeq({
                         ColorKey(0, Rgb(45, 48, 55)),
-                        ColorKey(1, Rgb(32, 33, 37))
-                    });
-                    Rotation = 90;
-                }); Library:Themeify(Items['Gradient'], 'Color', {'Gradients', 'Base'});
+                        ColorKey(1, Rgb(32, 33, 37)),
+                    }),
+                    Rotation = 90,
+                })
+                Library:Themeify(Items['Gradient'], 'Color', {'Gradients', 'Base'})
 
                 Items['Outline'] = Library:Create('UIStroke', {
-                    Parent = Items['Holder'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Borders.Outline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                }); Library:Themeify(Items['Outline'], 'Color', {'Borders', 'Outline'});
+                    Parent = Items['Holder'],
+                    Name = "\0",
+                    Color = Library.CurrentTheme.Borders.Outline or Rgb(0, 0, 0),
+                    Thickness = 1,
+                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                    LineJoinMode = Enum.LineJoinMode.Miter,
+                })
+                Library:Themeify(Items['Outline'], 'Color', {'Borders', 'Outline'})
 
                 Items['Inline'] = Library:Create('UIStroke', {
-                    Parent = Items['Holder'];
-                    Name = "\0";
-                    Color = Library.CurrentTheme.Borders.Inline or Rgb(0, 0, 0);
-                    Thickness = 1;
-                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
-                    LineJoinMode = Enum.LineJoinMode.Miter;
-                    BorderStrokePosition = Enum.BorderStrokePosition.Inner;
-                }); Library:Themeify(Items['Inline'], 'Color', {'Borders', 'Inline'});
+                    Parent = Items['Holder'],
+                    Name = "\0",
+                    Color = Library.CurrentTheme.Borders.Inline or Rgb(0, 0, 0),
+                    Thickness = 1,
+                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                    LineJoinMode = Enum.LineJoinMode.Miter,
+                    BorderStrokePosition = Enum.BorderStrokePosition.Inner,
+                })
+                Library:Themeify(Items['Inline'], 'Color', {'Borders', 'Inline'})
 
                 Items['Button'] = Library:Create('TextButton', {
-                    Parent = Items['Holder'];
-                    FontFace = Library.Font;
-                    TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224);
-                    Text = Cfg.Key.Name;
-                    AutoButtonColor = false;
-                    BackgroundTransparency = 1;
-                    AutomaticSize = Enum.AutomaticSize.X;
-                    Size = Dim2(0, 0, 1, 0);
-                    TextXAlignment = Enum.TextXAlignment.Center;
-                    TextYAlignment = Enum.TextYAlignment.Center;
-                    Position = Dim2(0.5, 0, 0.5, 0);
-                    AnchorPoint = Vec2(0.5, 0.5);
-                    TextSize = 12;
-                    BorderSizePixel = 0;
-                }); 
+                    Parent = Items['Holder'],
+                    FontFace = Library.Font,
+                    TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224),
+                    Text = typeof(Cfg.Key) == "EnumItem" and Cfg.Key.Name or tostring(Cfg.Key),
+                    AutoButtonColor = false,
+                    BackgroundTransparency = 1,
+                    AutomaticSize = Enum.AutomaticSize.X,
+                    Size = Dim2(0, 0, 1, 0),
+                    TextXAlignment = Enum.TextXAlignment.Center,
+                    TextYAlignment = Enum.TextYAlignment.Center,
+                    Position = Dim2(0.5, 0, 0.5, 0),
+                    AnchorPoint = Vec2(0.5, 0.5),
+                    TextSize = 12,
+                    BorderSizePixel = 0,
+                })
 
                 Library:Create('UIPadding', {
-                    Parent = Items['Button'];
-                    PaddingBottom = Dim(0,2);
-                });
-                
-            end 
+                    Parent = Items['Button'],
+                    PaddingBottom = Dim(0, 2),
+                })
+
+                local ModeMenu = Library:Create('Frame', {
+                    Parent = Library.Extras or (Library.Holder and Library.Holder.Parent) or Parent,
+                    Name = "\0",
+                    Size = Dim2(0, 68, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    BorderSizePixel = 0,
+                    BackgroundColor3 = (Library.CurrentTheme and Library.CurrentTheme.Sections and Library.CurrentTheme.Sections.Container) or Rgb(24, 25, 29),
+                    Visible = false,
+                    ZIndex = 120,
+                })
+                Items['ModeMenu'] = ModeMenu
+
+                local ModeMenuOutline = Library:Create('UIStroke', {
+                    Parent = ModeMenu,
+                    Name = "\0",
+                    Color = (Library.CurrentTheme and Library.CurrentTheme.Borders and Library.CurrentTheme.Borders.Outline) or Rgb(0, 0, 0),
+                    Thickness = 1,
+                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                    LineJoinMode = Enum.LineJoinMode.Miter,
+                })
+                Items['ModeMenuOutline'] = ModeMenuOutline
+
+                local ModeMenuInline = Library:Create('UIStroke', {
+                    Parent = ModeMenu,
+                    Name = "\0",
+                    Color = (Library.CurrentTheme and Library.CurrentTheme.Borders and Library.CurrentTheme.Borders.Inline) or Rgb(45, 48, 55),
+                    Thickness = 1,
+                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                    LineJoinMode = Enum.LineJoinMode.Miter,
+                    BorderStrokePosition = Enum.BorderStrokePosition.Inner,
+                })
+                Items['ModeMenuInline'] = ModeMenuInline
+
+                Library:Create('UIPadding', {
+                    Parent = ModeMenu,
+                    PaddingTop = Dim(0, 3),
+                    PaddingBottom = Dim(0, 3),
+                    PaddingLeft = Dim(0, 3),
+                    PaddingRight = Dim(0, 3),
+                })
+
+                Library:Create('UIListLayout', {
+                    Parent = ModeMenu,
+                    FillDirection = Enum.FillDirection.Vertical,
+                    SortOrder = Enum.SortOrder.LayoutOrder,
+                    Padding = Dim(0, 1),
+                })
+
+                local ModeButtons = {}
+                local Modes = {"Always", "Toggle", "Hold"}
+                for order, modeName in ipairs(Modes) do
+                    local ModeBtn = Library:Create('TextButton', {
+                        Parent = ModeMenu,
+                        Name = modeName,
+                        Size = Dim2(1, 0, 0, 16),
+                        BackgroundTransparency = 1,
+                        BorderSizePixel = 0,
+                        AutoButtonColor = false,
+                        FontFace = Library.Font,
+                        TextSize = 11,
+                        Text = modeName,
+                        LayoutOrder = order,
+                        TextXAlignment = Enum.TextXAlignment.Center,
+                        TextColor3 = (Cfg.Mode == modeName)
+                            and ((Library.CurrentTheme and Library.CurrentTheme.Accent) or Rgb(64, 185, 230))
+                            or ((Library.CurrentTheme and Library.CurrentTheme.Text and Library.CurrentTheme.Text.Main) or Rgb(214, 217, 224)),
+                        ZIndex = 121,
+                    })
+                    ModeButtons[modeName] = ModeBtn
+
+                    Library:Connect(ModeBtn.MouseEnter, function()
+                        if Cfg.Mode ~= modeName then
+                            Library:Tween(ModeBtn, {
+                                TextColor3 = (Library.CurrentTheme and Library.CurrentTheme.Accent) or Rgb(64, 185, 230)
+                            })
+                        end
+                    end)
+
+                    Library:Connect(ModeBtn.MouseLeave, function()
+                        if Cfg.Mode ~= modeName then
+                            Library:Tween(ModeBtn, {
+                                TextColor3 = (Library.CurrentTheme and Library.CurrentTheme.Text and Library.CurrentTheme.Text.Main) or Rgb(214, 217, 224)
+                            })
+                        end
+                    end)
+
+                    Library:Connect(ModeBtn.MouseButton1Click, function()
+                        Cfg:SetMode(modeName)
+                        Cfg:HideModeMenu()
+                    end)
+                end
+                Cfg.ModeButtons = ModeButtons
+            end
 
             local function ToggleToggle(Toggle)
-                Cfg.Active = Toggle;
+                Cfg.Active = Toggle
 
                 if Cfg.BindedToToggle and Cfg.ToggleObject and Cfg.ToggleObject.Set then
                     Cfg.ToggleObject:Set(Toggle)
+                elseif Cfg.SyncToggleState and ParentObj and ParentObj.Set then
+                    ParentObj:Set(Toggle)
                 end
 
-                Cfg.Callback(Toggle);
+                if type(Cfg.Callback) == "function" then
+                    Cfg.Callback(Toggle)
+                end
+                if type(Cfg.Clicked) == "function" then
+                    pcall(Cfg.Clicked, Toggle)
+                end
+                if Cfg.KeybindListEntry and Cfg.KeybindListEntry.UpdateColors then
+                    pcall(Cfg.KeybindListEntry.UpdateColors)
+                end
             end
-            
+
+            local function UpdateModeMenuPosition()
+                if not Items['ModeMenu'] or not Items['ModeMenu'].Visible then return end
+                local Holder = Items['Holder']
+                if not Holder or not Holder.Parent then return end
+
+                local Overlay = Library.Extras or Holder:FindFirstAncestorOfClass('ScreenGui')
+                if not Overlay then return end
+
+                local HolderPos = Holder.AbsolutePosition
+                local HolderSize = Holder.AbsoluteSize
+                local OverlayPos = Overlay.AbsolutePosition
+                local OverlaySize = Overlay.AbsoluteSize
+
+                local RelativeX = HolderPos.X - OverlayPos.X
+                local RelativeY = HolderPos.Y - OverlayPos.Y
+
+                local MenuWidth = 68
+                local MenuHeight = 56
+                local PosX = (RelativeX + HolderSize.X) - MenuWidth
+                local PosY = RelativeY + HolderSize.Y + 3
+
+                if PosY + MenuHeight > OverlaySize.Y then
+                    PosY = RelativeY - MenuHeight - 3
+                end
+
+                Items['ModeMenu'].Position = Dim2FromOffset(math.max(0, PosX), PosY)
+            end
+
+            function Cfg:HideModeMenu()
+                if Items['ModeMenu'] then
+                    Items['ModeMenu'].Visible = false
+                end
+                if Library.ActiveKeybindMenu == Cfg then
+                    Library.ActiveKeybindMenu = nil
+                end
+            end
+
+            function Cfg:ShowModeMenu()
+                if Library.Visible == false then return end
+                if Library.CloseKeybindMenus then
+                    Library:CloseKeybindMenus()
+                end
+                if Library.CloseDropdowns then
+                    Library:CloseDropdowns()
+                end
+                if Library.CloseColorpickers then
+                    Library:CloseColorpickers()
+                end
+
+                if not Items['ModeMenu'] then return end
+
+                if Library.Extras and Items['ModeMenu'].Parent ~= Library.Extras then
+                    Items['ModeMenu'].Parent = Library.Extras
+                end
+
+                Items['ModeMenu'].Visible = true
+                Library.ActiveKeybindMenu = Cfg
+                UpdateModeMenuPosition()
+            end
+
+            function Cfg:ToggleModeMenu()
+                if Items['ModeMenu'] and Items['ModeMenu'].Visible then
+                    Cfg:HideModeMenu()
+                else
+                    Cfg:ShowModeMenu()
+                end
+            end
+
+            function Cfg:SetMode(Mode)
+                if typeof(Mode) == "string" then
+                    Mode = Mode:sub(1,1):upper() .. Mode:sub(2):lower()
+                end
+                if Mode ~= "Always" and Mode ~= "Toggle" and Mode ~= "Hold" then
+                    Mode = "Hold"
+                end
+                Cfg.Mode = Mode
+
+                if Cfg.ModeButtons then
+                    for modeName, btn in pairs(Cfg.ModeButtons) do
+                        if modeName == Mode then
+                            btn.TextColor3 = (Library.CurrentTheme and Library.CurrentTheme.Accent) or Rgb(64, 185, 230)
+                        else
+                            btn.TextColor3 = (Library.CurrentTheme and Library.CurrentTheme.Text and Library.CurrentTheme.Text.Main) or Rgb(214, 217, 224)
+                        end
+                    end
+                end
+
+                if Cfg.Mode == "Always" then
+                    ToggleToggle(true)
+                elseif Cfg.Mode == "Hold" then
+                    local isHeld = false
+                    if typeof(Cfg.Key) == "EnumItem" then
+                        if Cfg.Key.EnumType == Enum.KeyCode then
+                            isHeld = InputService:IsKeyDown(Cfg.Key)
+                        elseif Cfg.Key.EnumType == Enum.UserInputType then
+                            isHeld = InputService:IsMouseButtonPressed(Cfg.Key)
+                        end
+                    end
+                    ToggleToggle(isHeld)
+                end
+
+                if Cfg.KeybindListEntry and Cfg.KeybindListEntry.Update then
+                    pcall(Cfg.KeybindListEntry.Update)
+                elseif Library.KeybindListInstance and Library.KeybindListInstance.Update then
+                    pcall(Library.KeybindListInstance.Update)
+                end
+
+                if type(Cfg.ModeChanged) == "function" then
+                    SafeCall(Cfg.ModeChanged, Mode)
+                end
+            end
+
             function Cfg:GetKey(v)
                 v = v or Cfg.Key
-                return Keys[v] or v.Name
+                if not v or v == Enum.KeyCode.Unknown then
+                    return "None"
+                end
+                if Keys[v] then
+                    return Keys[v]
+                end
+                if typeof(v) == "EnumItem" then
+                    return v.Name
+                end
+                return tostring(v)
+            end
+
+            function Cfg:GetState()
+                if Cfg.Mode == "Always" then
+                    return true
+                elseif Cfg.Mode == "Hold" then
+                    if not Cfg.Key or Cfg.Key == Enum.KeyCode.Unknown then
+                        return false
+                    end
+                    if typeof(Cfg.Key) == "EnumItem" then
+                        if Cfg.Key.EnumType == Enum.KeyCode then
+                            return InputService:IsKeyDown(Cfg.Key) and not InputService:GetFocusedTextBox()
+                        elseif Cfg.Key.EnumType == Enum.UserInputType then
+                            return InputService:IsMouseButtonPressed(Cfg.Key) and not InputService:GetFocusedTextBox()
+                        end
+                    end
+                    return false
+                else
+                    return Cfg.Active
+                end
             end
 
             function Cfg:Update()
@@ -5287,103 +5816,211 @@
 
                 Items.Padding.PaddingLeft = Dim(0, Padding)
                 Items.Padding.PaddingRight = Dim(0, Padding)
+
+                if ParentObj and ParentObj.UpdateAddonsPositions then
+                    ParentObj.UpdateAddonsPositions()
+                end
             end
 
             function Cfg:Set(Key, SkipCallback)
                 if typeof(Key) == "string" then
-                    Key = Enum.KeyCode[Key] or Enum.KeyCode.Unknown
+                    if Key == "MB1" then
+                        Key = Enum.UserInputType.MouseButton1
+                    elseif Key == "MB2" then
+                        Key = Enum.UserInputType.MouseButton2
+                    elseif Key == "MB3" then
+                        Key = Enum.UserInputType.MouseButton3
+                    elseif Key == "None" or Key == "Unknown" or Key == "nil" or Key == "" then
+                        Key = Enum.KeyCode.Unknown
+                    else
+                        Key = Enum.KeyCode[Key] or Enum.KeyCode.Unknown
+                    end
                 elseif typeof(Key) == "table" and Key.Name then
                     Key = Enum.KeyCode[Key.Name] or Enum.KeyCode.Unknown
                 end
 
                 Key = Key or Enum.KeyCode.Unknown
-
                 Cfg.Key = Key
 
                 Library:SetFlag(Cfg.Flag, Key)
-
                 Cfg:Update()
+
+                if Cfg.KeybindListEntry and Cfg.KeybindListEntry.UpdateKey then
+                    pcall(Cfg.KeybindListEntry.UpdateKey)
+                end
 
                 if not SkipCallback then
                     Cfg.Callback(Key)
                 end
             end
 
+            Items['Holder']:GetPropertyChangedSignal('AbsolutePosition'):Connect(UpdateModeMenuPosition)
+            Items['Holder']:GetPropertyChangedSignal('AbsoluteSize'):Connect(UpdateModeMenuPosition)
+            Items['Holder']:GetPropertyChangedSignal('Visible'):Connect(function()
+                if not Items['Holder'].Visible then
+                    Cfg:HideModeMenu()
+                end
+            end)
+
+            local LastRightClick = 0
+            local function OnRightClick()
+                if Cfg.Listening then return end
+                local now = tick()
+                if now - LastRightClick < 0.2 then return end
+                LastRightClick = now
+                Cfg:ToggleModeMenu()
+            end
+
+            Library:Connect(Items.Button.MouseButton2Click, OnRightClick)
+            Library:Connect(Items.Button.MouseButton2Down, OnRightClick)
+            Library:Connect(Items.Button.InputBegan, function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton2 then
+                    OnRightClick()
+                end
+            end)
+            Library:Connect(Items.Holder.InputBegan, function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton2 then
+                    OnRightClick()
+                end
+            end)
+
+            Library:Connect(InputService.InputBegan, function(Input, GameProcessed)
+                if Library.ActiveKeybindMenu == Cfg then
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.MouseButton2 then
+                        if Items['ModeMenu'] and Items['ModeMenu'].Visible then
+                            if not Library:IsHovering(Items['ModeMenu']) and not Library:IsHovering(Items['Holder']) then
+                                Cfg:HideModeMenu()
+                            end
+                        end
+                    end
+                end
+            end)
+
             Library:Connect(Items.Button.MouseButton1Click, function()
                 if Cfg.Listening then
                     return
                 end
+                Cfg:HideModeMenu()
 
-                Cfg.Listening = true;
-                Cfg:Update();
+                Cfg.Listening = true
+                Cfg:Update()
 
-                local Connection;
-                Connection = Library:Connect(InputService.InputBegan, function(Input, GameProcessed)
-                    if GameProcessed then
-                        return
-                    end
+                local Connection
+                task.defer(function()
+                    if not Cfg.Listening then return end
+                    Connection = Library:Connect(InputService.InputBegan, function(Input, GameProcessed)
+                        if GameProcessed then
+                            return
+                        end
 
-                    if Input.UserInputType ~= Enum.UserInputType.Keyboard then
-                        return
-                    end
+                        local Key
+                        if Input.UserInputType == Enum.UserInputType.Keyboard then
+                            if Input.KeyCode == Enum.KeyCode.Escape then
+                                Key = Enum.KeyCode.Unknown
+                            else
+                                Key = Input.KeyCode
+                            end
+                        elseif Input.UserInputType == Enum.UserInputType.MouseButton1
+                            or Input.UserInputType == Enum.UserInputType.MouseButton2
+                            or Input.UserInputType == Enum.UserInputType.MouseButton3 then
+                            Key = Input.UserInputType
+                        else
+                            return
+                        end
 
-                    Cfg.Key = Input.KeyCode;
-                    --Library.Flags[Cfg.Flag] = Cfg.Key;
-                    Library:SetFlag(Cfg.Flag, Cfg.Key)
+                        Cfg.Listening = false
+                        Cfg:Set(Key)
 
-                    Cfg.Listening = false
-                    Cfg:Update()
-
-                    Connection:Disconnect();
+                        if Connection then
+                            Connection:Disconnect()
+                            Connection = nil
+                        end
+                    end)
                 end)
             end)
 
             Library:Connect(InputService.InputBegan, function(Input, GameProcessed)
-                if GameProcessed then
+                if GameProcessed or Cfg.Listening then
+                    return
+                end
+                if InputService:GetFocusedTextBox() then
                     return
                 end
 
-                local Pressed = Input.KeyCode;
+                local isOurKey = false
+                if typeof(Cfg.Key) == "EnumItem" then
+                    if Cfg.Key.EnumType == Enum.KeyCode and Input.UserInputType == Enum.UserInputType.Keyboard then
+                        isOurKey = (Input.KeyCode == Cfg.Key)
+                    elseif Cfg.Key.EnumType == Enum.UserInputType and Input.UserInputType == Cfg.Key then
+                        isOurKey = true
+                    end
+                end
 
-                if Pressed ~= Cfg.Key then
+                if not isOurKey then
                     return
                 end
 
                 if Cfg.Mode == "Hold" then
-                    ToggleToggle(true);
-
+                    ToggleToggle(true)
                 elseif Cfg.Mode == "Toggle" then
-                    ToggleToggle(not Cfg.Active);
-
+                    ToggleToggle(not Cfg.Active)
                 elseif Cfg.Mode == "Always" then
-                    ToggleToggle(true);
+                    ToggleToggle(true)
                 end
             end)
 
             Library:Connect(InputService.InputEnded, function(Input, GameProcessed)
-                if GameProcessed then
+                if GameProcessed or Cfg.Listening then
                     return
                 end
 
-                if Input.KeyCode ~= Cfg.Key then
+                local isOurKey = false
+                if typeof(Cfg.Key) == "EnumItem" then
+                    if Cfg.Key.EnumType == Enum.KeyCode and Input.UserInputType == Enum.UserInputType.Keyboard then
+                        isOurKey = (Input.KeyCode == Cfg.Key)
+                    elseif Cfg.Key.EnumType == Enum.UserInputType and Input.UserInputType == Cfg.Key then
+                        isOurKey = true
+                    end
+                end
+
+                if not isOurKey then
                     return
                 end
 
                 if Cfg.Mode == "Hold" then
-                    ToggleToggle(false);
+                    ToggleToggle(false)
                 end
             end)
 
-            Cfg:Set(Cfg.Key)
+            Library:RegisterThemeCallback(function()
+                if Items['ModeMenu'] then
+                    Items['ModeMenu'].BackgroundColor3 = (Library.CurrentTheme and Library.CurrentTheme.Sections and Library.CurrentTheme.Sections.Container) or Rgb(24, 25, 29)
+                end
+                if Items['ModeMenuOutline'] then
+                    Items['ModeMenuOutline'].Color = (Library.CurrentTheme and Library.CurrentTheme.Borders and Library.CurrentTheme.Borders.Outline) or Rgb(0, 0, 0)
+                end
+                if Items['ModeMenuInline'] then
+                    Items['ModeMenuInline'].Color = (Library.CurrentTheme and Library.CurrentTheme.Borders and Library.CurrentTheme.Borders.Inline) or Rgb(45, 48, 55)
+                end
+                if Cfg.ModeButtons then
+                    for modeName, btn in pairs(Cfg.ModeButtons) do
+                        if modeName == Cfg.Mode then
+                            btn.TextColor3 = (Library.CurrentTheme and Library.CurrentTheme.Accent) or Rgb(64, 185, 230)
+                        else
+                            btn.TextColor3 = (Library.CurrentTheme and Library.CurrentTheme.Text and Library.CurrentTheme.Text.Main) or Rgb(214, 217, 224)
+                        end
+                    end
+                end
+            end)
+
+            Cfg:Set(Cfg.Key, true)
+            Cfg:SetMode(Cfg.Mode)
             Library.Elements[Cfg.Flag] = Cfg
 
             if Library.KeybindListInstance and Library.KeybindListInstance.AddEntry then
                 Library.KeybindListInstance:AddEntry(Cfg)
             end
 
-            --
-
-            -- Extras
             return SetMetaTbl(Cfg, Library)
         end
 
@@ -5416,14 +6053,21 @@
                 Connections = {};
             };
             
-            if self.Items and self.Items.Content then
-                Cfg.BindedToToggle = true
-                Cfg.ToggleObject = self
+            local ParentObj = self
+            if self.ToggleObject then
+                ParentObj = self.ToggleObject
+            end
+
+            if ParentObj.Items and (ParentObj.Items.Content or ParentObj.Items.Container) then
+                if ParentObj.Items.Content then
+                    Cfg.BindedToToggle = true
+                    Cfg.ToggleObject = ParentObj
+                end
             end
 
             local Parent = Cfg.BindedToToggle
-                and self.Items.Content
-                or self.Items.Container
+                and ParentObj.Items.Content
+                or ParentObj.Items.Container
 
             local Items = Cfg.Items; do
 
@@ -5507,6 +6151,30 @@
                     BorderSizePixel = 0;
                     BackgroundColor3 = Rgb(255, 255, 255);
                 });
+
+                if Cfg.BindedToToggle then
+                    ParentObj.Addons = ParentObj.Addons or {}
+                    table.insert(ParentObj.Addons, Cfg)
+
+                    local function UpdateAddonsPositions()
+                        local offset = 0
+                        for i = #ParentObj.Addons, 1, -1 do
+                            local addon = ParentObj.Addons[i]
+                            if addon.Items and addon.Items['Bind'] then
+                                addon.Items['Bind'].AnchorPoint = Vec2(1, 0.5)
+                                addon.Items['Bind'].Position = Dim2(1, -offset, 0.5, 0)
+                                offset = offset + 26
+                            elseif addon.Items and addon.Items['Holder'] then
+                                local w = (addon.Items['Holder'].AbsoluteSize.X > 0) and addon.Items['Holder'].AbsoluteSize.X or 30
+                                addon.Items['Holder'].AnchorPoint = Vec2(1, 0.5)
+                                addon.Items['Holder'].Position = Dim2(1, -offset, 0.5, 0)
+                                offset = offset + w + 4
+                            end
+                        end
+                    end
+                    ParentObj.UpdateAddonsPositions = UpdateAddonsPositions
+                    UpdateAddonsPositions()
+                end
 
                 Items['Glow'] = Library:CreateGlow(Items['Bind'], {
                     Color = (typeof(Cfg.Default) == "Color3") and Cfg.Default or Rgb(255, 0, 0);
@@ -5684,6 +6352,58 @@
 
             Cfg:Set(Cfg.Default, Cfg.Alpha)
 
+            return SetMetaTbl(Cfg, Library)
+        end
+
+        function Library:Label(params)
+            local paramName = typeof(params) == "string" and params or (params and (params.Name or params.name or params.Text or params.text)) or "label"
+            local paramFlag = typeof(params) == "table" and (params.Flag or params.flag) or Library:MakeFlag(self, 'label')
+            local Cfg = {
+                Name = paramName,
+                Flag = paramFlag,
+                Items = {},
+                Addons = {},
+            }
+
+            local Items = Cfg.Items; do
+                Items['Container'] = Library:Create('Frame', {
+                    Parent = self.Items['Container'],
+                    Name = "\0",
+                    BackgroundTransparency = 1,
+                    BorderSizePixel = 0,
+                    Size = Dim2(1, 0, 0, 13),
+                    Position = Dim2(0, 0, 0, 0),
+                })
+
+                Items['Content'] = Items['Container']
+
+                Items['Text'] = Library:Create('TextLabel', {
+                    Parent = Items['Container'],
+                    Name = "\0",
+                    BackgroundTransparency = 1,
+                    Size = Dim2(1, 0, 0, 12),
+                    FontFace = Library.Font,
+                    Position = Dim2(0, -1, 0, 0),
+                    AnchorPoint = Vec2(0, 0),
+                    Text = Cfg.Name,
+                    TextSize = 12,
+                    TextColor3 = Library.CurrentTheme.Text.Main or Rgb(214, 217, 224),
+                    BackgroundColor3 = Rgb(255, 255, 255),
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextYAlignment = Enum.TextYAlignment.Center,
+                }); Library:Themeify(Items['Text'], 'TextColor3', {'Text', 'Main'})
+            end
+
+            function Cfg:Set(text)
+                Cfg.Name = tostring(text)
+                Items['Text'].Text = tostring(text)
+            end
+
+            function Cfg:SetText(text)
+                Cfg:Set(text)
+            end
+
+            Library.Elements[Cfg.Flag] = Cfg
             return SetMetaTbl(Cfg, Library)
         end
 
@@ -6235,11 +6955,29 @@
                     EntryItems['KeyLabel'].Text = '[' .. (KeybindCfg:GetKey(KeybindCfg.Key) or 'NONE') .. ']'
                 end
 
+                local function UpdateMode()
+                    if EntryItems['Mode'] then
+                        EntryItems['Mode'].Text = '(' .. (KeybindCfg.Mode or 'Toggle'):lower() .. ')'
+                    end
+                end
+
+                KeybindCfg.KeybindListEntry = {
+                    Update = function()
+                        UpdateColors()
+                        UpdateKey()
+                        UpdateMode()
+                    end,
+                    UpdateColors = UpdateColors,
+                    UpdateKey = UpdateKey,
+                    UpdateMode = UpdateMode,
+                }
+
                 Insert(Cfg.EntryInstances, {
                     KeybindCfg = KeybindCfg,
                     EntryItems = EntryItems,
                     UpdateColors = UpdateColors,
                     UpdateKey = UpdateKey,
+                    UpdateMode = UpdateMode,
                 })
 
                 Library:RegisterThemeCallback(function()
@@ -6249,6 +6987,7 @@
                 Library:Connect(RunService.Heartbeat, function()
                     UpdateColors()
                     UpdateKey()
+                    UpdateMode()
                 end)
 
                 return EntryItems
@@ -6263,6 +7002,10 @@
             return SetMetaTbl(Cfg, Library)
         end
 
+
+    Library.AddKeyPicker = Library.Keybind
+    Library.AddKeybind = Library.Keybind
+    Library.KeyPicker = Library.Keybind
 
     -- Export Library and types for external / GitHub loading
     Library.Themes = Themes
