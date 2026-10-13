@@ -1,4 +1,4 @@
---222
+--
 
 --
 
@@ -1780,120 +1780,96 @@
         end
 
         --[[ Menu cursor
-            A custom arrow that fades in while the mouse is over the menu, so the UI stays usable
-            when a game hides or replaces the native cursor (gun equipped, custom crosshair, ...).
+            Same cursor as LinoriaLib: two Drawing triangles at
+                (X, Y)  (X + 16, Y + 6)  (X + 6, Y + 16)
+            a filled one in the accent colour and a 1px black outline on top. The only additions are
+            a smooth fade and the fact that it is only shown while the mouse is actually over the menu.
 
-            Performance design:
-              * zero per-frame work while the menu is closed (the update loop is only connected
-                while the menu is open),
-              * "is the mouse over the menu?" is answered from a small set of currently-visible
-                surfaces that is maintained by events (Visible changes / ChildAdded / ChildRemoved),
-                never by scanning the GUI tree,
-              * the fade is a TweenService tween (runs in the engine, no Lua per frame),
-              * the cursor is 4 plain Frames (no images, no Drawing objects, no allocations per frame
-                other than the position UDim2), and the position is only written when the mouse moved.
+            "Over the menu" is a strict whitelist: the main window plus the popups that belong to it
+            (dropdown list, colour picker, keybind mode menu). HUD overlays such as the keybind list
+            and the watermark never count.
 
-            API:  Library:SetCursor(true/false)   -- enable / disable the menu cursor
+            Performance:
+              * nothing runs while the menu is closed and the cursor has faded out,
+              * the whitelist is maintained by events (Visible / Destroying), nothing scans the GUI,
+              * the Drawing points are only rewritten when the mouse moved, and the transparency
+                only while it is actually fading.
+
+            API:  Library:SetCursor(true / false)
         ]]
         Library.CursorEnabled = true
         Library.CursorFadeTime = 0.15
         Library.Cursor = nil
+        Library.CursorQueue = nil
 
-        function Library:InitCursor()
+        -- registers a menu surface (popup) with the cursor's hit-test
+        function Library:AddCursorRegion(Object)
+            local State = Library.Cursor
+            if State and State.Track then
+                State.Track(Object)
+            else
+                Library.CursorQueue = Library.CursorQueue or {}
+                Insert(Library.CursorQueue, Object)
+            end
+        end
+
+        function Library:InitCursor(WindowFrame)
             if Library.Cursor then
                 Library:DestroyCursor()
             end
 
             local State = {
-                Shown = false,       -- what the fade is currently heading towards
-                OwnsIcon = false,    -- true while we are the ones hiding the native cursor
+                StepName = "FatalMenuCursor",
+                Supported = false,
+                Loop = false,         -- true while the render step is bound
+                Progress = 0,         -- fade progress 0..1
+                Target = 0,
+                Dirty = true,         -- the Drawing points need to be rewritten
+                DrawVisible = false,
+                OwnsIcon = false,     -- true while we are the ones hiding the native cursor
                 SavedIcon = true,
-                Regions = {},        -- [GuiObject] = true, only for menu surfaces that are Visible
-                Tracked = {},        -- [GuiObject] = Visible watcher
-                Signals = {},        -- container ChildAdded / ChildRemoved watchers
-                Masks = {},          -- the two frames whose transparency is faded
-                Tweens = {},
+                Regions = {},         -- [GuiObject] = true, whitelisted surfaces that are Visible
+                Tracked = {},         -- [GuiObject] = connections
                 Last = nil,
                 NextCheck = 0,
             }
             Library.Cursor = State
 
-            local function GuiParent()
-                if typeof(gethui) == "function" then
-                    local Ok, Hui = pcall(gethui)
-                    if Ok and Hui then return Hui end
+            -- Drawing objects (same as Linoria) ----------------------------------------------
+            local Env = (typeof(getgenv) == "function" and getgenv()) or _G
+            local DrawingLib = Env and Env.Drawing
+            local Created = DrawingLib and pcall(function()
+                State.Fill = DrawingLib.new("Triangle")
+                State.Fill.Thickness = 1
+                State.Fill.Filled = true
+                State.Fill.Color = Library.CurrentTheme.Accent
+                State.Fill.Transparency = 0
+                State.Fill.Visible = false
+
+                State.Outline = DrawingLib.new("Triangle")
+                State.Outline.Thickness = 1
+                State.Outline.Filled = false
+                State.Outline.Color = Rgb(0, 0, 0)
+                State.Outline.Transparency = 0
+                State.Outline.Visible = false
+            end)
+            State.Supported = (Created == true) and State.Fill ~= nil and State.Outline ~= nil
+
+            if not State.Supported then
+                -- no Drawing API in this environment: leave the native cursor completely untouched
+                for _, Key in { "Fill", "Outline" } do
+                    if State[Key] then pcall(function() State[Key]:Remove() end) end
                 end
-                local Ok = pcall(function() return game:GetService("CoreGui").Name end)
-                if Ok then return game:GetService("CoreGui") end
-                return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer.PlayerGui
+                return
             end
 
-            State.Gui = Library:Create('ScreenGui', {
-                Name = '\0';
-                ResetOnSpawn = false;
-                IgnoreGuiInset = true;          -- same origin as GetMouseLocation()
-                DisplayOrder = 2147483647;      -- above every menu gui
-                ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
-                Enabled = false;
-                Parent = GuiParent();
-            })
+            Library:RegisterThemeCallback(function()
+                if Library.Cursor == State and State.Fill then
+                    State.Fill.Color = Library.CurrentTheme.Accent
+                end
+            end)
 
-            State.Root = Library:Create('Frame', {
-                Parent = State.Gui;
-                Name = '\0';
-                BackgroundTransparency = 1;
-                BorderSizePixel = 0;
-                Size = Dim2(0, 0, 0, 0);
-            })
-
-            -- Right triangle with vertices (0,0) (0,H) (W,H) in clip space: the tip is the hotspot.
-            -- The sloped edge is the edge of a rotated square "mask"; the unrotated clip frame
-            -- cuts everything else away. (Px, Py) is a point on the sloped edge, in clip space.
-            local function Triangle(Parent, X, Y, W, H, Angle, Px, Py, Color)
-                local Clip = Library:Create('Frame', {
-                    Parent = Parent;
-                    Name = '\0';
-                    BackgroundTransparency = 1;
-                    BorderSizePixel = 0;
-                    ClipsDescendants = true;
-                    Position = Dim2FromOffset(X, Y);
-                    Size = Dim2FromOffset(W, H);
-                })
-
-                local Half = Ceil(Sqrt(W * W + H * H)) + 4
-                local Mask = Library:Create('Frame', {
-                    Parent = Clip;
-                    Name = '\0';
-                    AnchorPoint = Vec2(0.5, 0.5);
-                    BorderSizePixel = 0;
-                    BackgroundColor3 = Color;
-                    BackgroundTransparency = 1;
-                    Rotation = Deg(Angle);
-                    Size = Dim2FromOffset(Half * 2, Half * 2);
-                    -- scale-based so the position keeps sub-pixel precision
-                    Position = Dim2((Px - Sin(Angle) * Half) / W, 0, (Py + Cos(Angle) * Half) / H, 0);
-                })
-                return Mask
-            end
-
-            local W, H, B = 11, 17, 1
-            local Angle = Atan2(H, W)
-            local Sn, Cs = Sin(Angle), Cos(Angle)
-
-            -- outline: same slope, pushed out by B pixels on every side
-            local T0 = -(B + B * Sn) / Cs
-            local OY = Round(-B * Cs + T0 * Sn)
-            local T1 = (H + B + B * Cs) / Sn
-            local OX = -B
-            local OW = Ceil(B * Sn + T1 * Cs - OX)
-            local OH = (H + B) - OY
-
-            local Outline = Triangle(State.Root, OX, OY, OW, OH, Angle, B * Sn - OX, -B * Cs - OY, Library.CurrentTheme.Accent)
-            Library:Themeify(Outline, 'BackgroundColor3', {'Accent'})
-            local Fill = Triangle(State.Root, 0, 0, W, H, Angle, 0, 0, Rgb(255, 255, 255))
-            State.Masks = { Outline, Fill }
-
-            -- native cursor handling -------------------------------------------------------
+            -- native cursor ------------------------------------------------------------------
             local function HideNative()
                 if InputService.MouseIconEnabled then
                     State.SavedIcon = true
@@ -1909,38 +1885,35 @@
                 end
             end
 
-            -- visible menu surfaces ----------------------------------------------------------
-            local function Track(Object)
-                if State.Tracked[Object] or Object == State.Gui or not Object:IsA('GuiObject') then
-                    return
-                end
-                local function Sync()
-                    State.Regions[Object] = Object.Visible or nil
-                end
-                State.Tracked[Object] = Object:GetPropertyChangedSignal('Visible'):Connect(Sync)
-                Sync()
-            end
-
+            -- whitelist of menu surfaces -----------------------------------------------------
             local function Untrack(Object)
-                local Connection = State.Tracked[Object]
-                if Connection then
-                    Connection:Disconnect()
+                local Connections = State.Tracked[Object]
+                if Connections then
+                    for _, Connection in Connections do Connection:Disconnect() end
                     State.Tracked[Object] = nil
                 end
                 State.Regions[Object] = nil
             end
 
-            local function Watch(Container)
-                if not Container then return end
-                for _, Child in Container:GetChildren() do
-                    Track(Child)
+            function State.Track(Object)
+                if not Object or State.Tracked[Object] or not Object:IsA('GuiObject') then
+                    return
                 end
-                Insert(State.Signals, Container.ChildAdded:Connect(Track))
-                Insert(State.Signals, Container.ChildRemoved:Connect(Untrack))
+                local function Sync()
+                    State.Regions[Object] = Object.Visible or nil
+                end
+                State.Tracked[Object] = {
+                    Object:GetPropertyChangedSignal('Visible'):Connect(Sync),
+                    Object.Destroying:Connect(function() Untrack(Object) end),
+                }
+                Sync()
             end
 
-            Watch(Library.Holder)
-            Watch(Library.Extras)
+            State.Track(WindowFrame)
+            if Library.CursorQueue then
+                for _, Object in Library.CursorQueue do State.Track(Object) end
+                Library.CursorQueue = nil
+            end
 
             local function IsOverMenu(Point)
                 local X, Y = Point.X, Point.Y
@@ -1954,84 +1927,97 @@
                 return false
             end
 
-            -- fade ------------------------------------------------------------------------
-            local function Finalize()
-                State.Gui.Enabled = false
-                RestoreNative()
+            -- render step ---------------------------------------------------------------------
+            local function Stop()
+                State.Loop = false
+                pcall(function() RunService:UnbindFromRenderStep(State.StepName) end)
             end
 
-            function State.SetTarget(Value)
-                if State.Shown == Value then return end
-                State.Shown = Value
+            function State.Step(Delta)
+                local MenuOpen = Library.CursorEnabled and Library.Visible ~= false
 
-                local Info = TweenInfo.new(Library.CursorFadeTime, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-                for Index, Mask in State.Masks do
-                    local Old = State.Tweens[Index]
-                    if Old then Old:Cancel() end
-                    local Tw = TweenService:Create(Mask, Info, { BackgroundTransparency = Value and 0 or 1 })
-                    State.Tweens[Index] = Tw
-                    Tw:Play()
-                end
-
-                if Value then
-                    State.Gui.Enabled = true
-                    HideNative()
-                else
-                    -- keep the native cursor hidden until the fade is done, so they never overlap
-                    local Done
-                    Done = State.Tweens[1].Completed:Connect(function(Playback)
-                        Done:Disconnect()
-                        if Playback == Enum.PlaybackState.Completed and not State.Shown then
-                            Finalize()
-                        end
-                    end)
-                end
-            end
-
-            -- per-frame update (only connected while the menu is open) -----------------------
-            function State.Step()
                 local Mouse = InputService:GetMouseLocation()
                 local Moved = Mouse ~= State.Last
-
                 if Moved then
                     State.Last = Mouse
-                    State.Root.Position = Dim2(0, Mouse.X, 0, Mouse.Y)
+                    State.Dirty = true
                 end
 
+                -- is the mouse over the menu? (stationary mouse: re-check at 4 Hz for moved windows / opened popups)
                 local Now = os.clock()
-                if Moved or Now >= State.NextCheck then
-                    State.NextCheck = Now + 0.25 -- stationary mouse: re-check at 4 Hz (window moved, popup opened, ...)
-                    State.SetTarget(
-                        InputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter
-                        and IsOverMenu(Mouse)
-                    )
+                if not MenuOpen then
+                    State.Target = 0
+                elseif Moved or Now >= State.NextCheck then
+                    State.NextCheck = Now + 0.25
+                    State.Target = (InputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter and IsOverMenu(Mouse)) and 1 or 0
                 end
 
-                -- some games re-enable their cursor every frame; keep it hidden while ours is up
-                if State.Shown and InputService.MouseIconEnabled then
-                    HideNative()
+                -- fade
+                local Progress, Target = State.Progress, State.Target
+                if Progress ~= Target then
+                    if Progress == 0 then State.Dirty = true end
+                    local Amount = Delta / Maximum(Library.CursorFadeTime, 0.01)
+                    if Target > Progress then
+                        Progress = Minimum(Target, Progress + Amount)
+                    else
+                        Progress = Maximum(Target, Progress - Amount)
+                    end
+                    State.Progress = Progress
+
+                    local Eased = Progress * Progress * (3 - 2 * Progress)
+                    State.Fill.Transparency = Eased
+                    State.Outline.Transparency = Eased
+
+                    local Visible = Progress > 0
+                    if Visible ~= State.DrawVisible then
+                        State.DrawVisible = Visible
+                        State.Fill.Visible = Visible
+                        State.Outline.Visible = Visible
+                    end
+                end
+
+                if Progress > 0 then
+                    if State.Dirty then
+                        State.Dirty = false
+                        local X, Y = Mouse.X, Mouse.Y
+                        local A, B, C = Vec2(X, Y), Vec2(X + 16, Y + 6), Vec2(X + 6, Y + 16)
+                        State.Fill.PointA = A
+                        State.Fill.PointB = B
+                        State.Fill.PointC = C
+                        State.Outline.PointA = A
+                        State.Outline.PointB = B
+                        State.Outline.PointC = C
+                    end
+                    -- keep the native cursor hidden while ours is up (some games re-enable it every frame)
+                    if InputService.MouseIconEnabled then
+                        HideNative()
+                    end
+                else
+                    RestoreNative()
+                    if not MenuOpen then
+                        Stop()
+                    end
                 end
             end
+
+            State.Stop = Stop
+            State.RestoreNative = RestoreNative
 
             Library:CursorSync()
         end
 
-        -- Starts / stops the update loop depending on the menu state. Costs nothing while closed.
+        -- Binds the render step while the menu is open. It unbinds itself once the menu is closed
+        -- and the cursor has faded out, so a closed menu costs nothing.
         function Library:CursorSync()
             local State = Library.Cursor
-            if not State then return end
+            if not State or not State.Supported then return end
 
-            if Library.CursorEnabled and Library.Visible ~= false then
-                if not State.Loop then
-                    State.Last = nil -- force a hit-test on the first frame
-                    State.Loop = RunService.RenderStepped:Connect(State.Step)
-                end
-            else
-                if State.Loop then
-                    State.Loop:Disconnect()
-                    State.Loop = nil
-                end
-                State.SetTarget(false)
+            if Library.CursorEnabled and Library.Visible ~= false and not State.Loop then
+                State.Loop = true
+                State.Last = nil
+                State.NextCheck = 0
+                pcall(function() RunService:UnbindFromRenderStep(State.StepName) end)
+                RunService:BindToRenderStep(State.StepName, Enum.RenderPriority.Camera.Value - 1, State.Step)
             end
         end
 
@@ -2045,18 +2031,22 @@
             if not State then return end
             Library.Cursor = nil
 
-            if State.Loop then State.Loop:Disconnect() end
-            for _, Tween in State.Tweens do Tween:Cancel() end
-            for _, Connection in State.Tracked do Connection:Disconnect() end
-            for _, Connection in State.Signals do Connection:Disconnect() end
-            if State.OwnsIcon then
-                InputService.MouseIconEnabled = State.SavedIcon
+            pcall(function() RunService:UnbindFromRenderStep(State.StepName) end)
+            for _, Connections in State.Tracked do
+                for _, Connection in Connections do Connection:Disconnect() end
             end
-            if State.Gui then
-                pcall(function() State.Gui:Destroy() end)
+            if State.OwnsIcon then
+                pcall(function() InputService.MouseIconEnabled = State.SavedIcon end)
+            end
+            for _, Key in { "Fill", "Outline" } do
+                local Obj = State[Key]
+                if Obj then
+                    if not pcall(function() Obj:Remove() end) then
+                        pcall(function() Obj:Destroy() end)
+                    end
+                end
             end
         end
-
 
         --
 
@@ -2349,7 +2339,7 @@
         Cfg.Items = Items;
         Cfg.Tabs = Items.Tabs;
 
-        Library:InitCursor();
+        Library:InitCursor(Items['Window']);
 
         return SetMetaTbl(Cfg, Library);
     end
@@ -2382,6 +2372,7 @@
                     BorderSizePixel = 0;
                     BackgroundColor3 = Rgb(255, 255, 255);
                 });
+                Library:AddCursorRegion(Items['Picker']);
 
                 Items['Outline'] = Library:Create('UIStroke', {
                     Parent = Items['Picker'];
@@ -5316,6 +5307,7 @@
                     local SpaceBelow = OverlaySize.Y - (RelativeY + HolderSize.Y)
                     local OpenUpwards = SpaceBelow < ContentHeight + 10
 
+                    Library:AddCursorRegion(Container)
                     Container.Parent = Overlay
 
                     Container.Size = Dim2FromOffset(
@@ -5844,6 +5836,7 @@
                     ZIndex = 120,
                 })
                 Items['ModeMenu'] = ModeMenu
+                Library:AddCursorRegion(ModeMenu)
 
                 local ModeMenuOutline = Library:Create('UIStroke', {
                     Parent = ModeMenu,
@@ -6953,8 +6946,7 @@
                     Parent = Library.Extras;
                     Name = "\0";
                     Position = Dim2(0, 200, 0, 300);
-                    Size = Dim2(0, 180, 0, 0);
-                    AutomaticSize = Enum.AutomaticSize.Y;
+                    Size = Dim2(0, 180, 0, 34); -- driven by Cfg:Resize()
                     BorderSizePixel = 0;
                     BackgroundColor3 = Rgb(255, 255, 255);
                 })
@@ -6998,17 +6990,10 @@
                 Items['Inner'] = Library:Create('Frame', {
                     Parent = Items['Container'];
                     Name = "\0";
-                    Size = Dim2(1, 0, 0, 0);
-                    AutomaticSize = Enum.AutomaticSize.Y;
+                    Size = Dim2(1, 0, 1, 0);
                     BorderSizePixel = 0;
                     BackgroundColor3 = Library.CurrentTheme.Background;
                 }) Library:Themeify(Items['Inner'], 'BackgroundColor3', {'Background'})
-
-                Library:Create('UIListLayout', {
-                    Parent = Items['Inner'];
-                    Padding = Dim(0, 0);
-                    SortOrder = Enum.SortOrder.LayoutOrder;
-                })
 
                 Items['InnerOutline'] = Library:Create('UIStroke', {
                     Parent = Items['Inner'];
@@ -7024,7 +7009,6 @@
                     Parent = Items['Inner'];
                     Name = "\0";
                     Size = Dim2(1, 0, 0, 2);
-                    LayoutOrder = 0;
                     BorderSizePixel = 0;
                     BackgroundColor3 = Library.CurrentTheme.Accent;
                 }) Library:Themeify(Items['Accent'], 'BackgroundColor3', {'Accent'})
@@ -7033,7 +7017,7 @@
                     Parent = Items['Inner'];
                     Name = "\0";
                     Size = Dim2(1, 0, 0, 18);
-                    LayoutOrder = 1;
+                    Position = Dim2(0, 0, 0, 2);
                     BorderSizePixel = 0;
                     BackgroundTransparency = 1;
                 })
@@ -7056,9 +7040,8 @@
                 Items['EntriesHolder'] = Library:Create('Frame', {
                     Parent = Items['Inner'];
                     Name = "\0";
-                    Size = Dim2(1, 0, 0, 0);
-                    AutomaticSize = Enum.AutomaticSize.Y;
-                    LayoutOrder = 2;
+                    Position = Dim2(0, 0, 0, 20);
+                    Size = Dim2(1, 0, 1, -20);
                     BorderSizePixel = 0;
                     BackgroundTransparency = 1;
                 })
@@ -7090,6 +7073,20 @@
                 Items['Container'].Visible = Value
             end
 
+            -- Rows are a fixed 12px with 4px between them, so the height is known exactly and nothing
+            -- depends on AutomaticSize. Width grows only if a row is wider than the 180px minimum.
+            -- 8 = container padding (4 + 4), 20 = accent bar + title, 6 = entries bottom padding
+            function Cfg:Resize()
+                local Rows = #Cfg.EntryInstances
+                local ContentHeight = Rows > 0 and (Rows * 12 + (Rows - 1) * 4) or 0
+                local Width = 180
+                for _, Entry in Cfg.EntryInstances do
+                    local RowWidth = Ceil(Entry.RowLayout.AbsoluteContentSize.X) + 12 + 8
+                    if RowWidth > Width then Width = RowWidth end
+                end
+                Items['Container'].Size = Dim2(0, Width, 0, 8 + 20 + ContentHeight + 6)
+            end
+
             function Cfg:AddEntry(KeybindCfg)
                 local EntryItems = {}
 
@@ -7101,13 +7098,16 @@
                     BorderSizePixel = 0;
                 })
 
-                Library:Create('UIListLayout', {
+                local RowLayout = Library:Create('UIListLayout', {
                     Parent = EntryItems['Row'];
                     FillDirection = Enum.FillDirection.Horizontal;
                     VerticalAlignment = Enum.VerticalAlignment.Center;
                     Padding = Dim(0, 3);
                     SortOrder = Enum.SortOrder.LayoutOrder;
                 })
+                Library:Connect(RowLayout:GetPropertyChangedSignal('AbsoluteContentSize'), function()
+                    Cfg:Resize()
+                end)
 
                 EntryItems['Arrow'] = Library:Create('TextLabel', {
                     Parent = EntryItems['Row'];
@@ -7243,25 +7243,35 @@
                     TextColor3 = Library.CurrentTheme.Text.Unselected;
                 }) Library:Themeify(EntryItems['Mode'], 'TextColor3', {'Text', 'Unselected'})
 
-                local function UpdateColors()
-                    local IsActive = KeybindCfg.Active
-                    local AccentColor = Library.CurrentTheme.Accent
-                    local UnselectedColor = Library.CurrentTheme.Text.Unselected
+                local LastActive
+                local LastKeyText = EntryItems['KeyLabel'].Text
+                local LastModeText = EntryItems['Mode'].Text
 
-                    local TargetColor = IsActive and AccentColor or UnselectedColor
+                local function UpdateColors(Force)
+                    local IsActive = KeybindCfg.Active and true or false
+                    if not Force and IsActive == LastActive then return end
+                    LastActive = IsActive
+
+                    local TargetColor = IsActive
+                        and Library.CurrentTheme.Accent
+                        or Library.CurrentTheme.Text.Unselected
 
                     Library:Tween(EntryItems['Arrow'], { TextColor3 = TargetColor })
                     Library:Tween(EntryItems['Name'], { TextColor3 = TargetColor })
                 end
 
                 local function UpdateKey()
-                    EntryItems['KeyLabel'].Text = '[' .. (KeybindCfg:GetKey(KeybindCfg.Key) or 'NONE') .. ']'
+                    local Text = '[' .. (KeybindCfg:GetKey(KeybindCfg.Key) or 'NONE') .. ']'
+                    if Text == LastKeyText then return end
+                    LastKeyText = Text
+                    EntryItems['KeyLabel'].Text = Text
                 end
 
                 local function UpdateMode()
-                    if EntryItems['Mode'] then
-                        EntryItems['Mode'].Text = '(' .. (KeybindCfg.Mode or 'Toggle'):lower() .. ')'
-                    end
+                    local Text = '(' .. (KeybindCfg.Mode or 'Toggle'):lower() .. ')'
+                    if Text == LastModeText then return end
+                    LastModeText = Text
+                    EntryItems['Mode'].Text = Text
                 end
 
                 KeybindCfg.KeybindListEntry = {
@@ -7278,13 +7288,14 @@
                 Insert(Cfg.EntryInstances, {
                     KeybindCfg = KeybindCfg,
                     EntryItems = EntryItems,
+                    RowLayout = RowLayout,
                     UpdateColors = UpdateColors,
                     UpdateKey = UpdateKey,
                     UpdateMode = UpdateMode,
                 })
 
                 Library:RegisterThemeCallback(function()
-                    UpdateColors()
+                    UpdateColors(true)
                 end)
 
                 Library:Connect(RunService.Heartbeat, function()
@@ -7292,6 +7303,8 @@
                     UpdateKey()
                     UpdateMode()
                 end)
+
+                Cfg:Resize()
 
                 return EntryItems
             end
